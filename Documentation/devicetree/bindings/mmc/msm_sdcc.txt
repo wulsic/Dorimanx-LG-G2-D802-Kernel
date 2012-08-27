@@ -4,14 +4,23 @@ Secure Digital Card Controller provides host interface to
 SD/MMC/SDIO cards.
 
 Required properties:
-  - compatible : should be "qcom,msm-sdcc"
-  - reg : should contain SDCC, BAM register map.
-  - interrupts : should contain SDCC core interrupt.
-  - qcom,sdcc-clk-rates : specifies supported SDCC clock frequencies, Units - Hz.
-  - qcom,sdcc-sup-voltages: specifies supported voltage ranges for card. Should always be
-			specified in pairs (min, max), Units - mV.
-  - <supply-name>-supply: phandle to the regulator device tree node
-  "supply-name" examples are "vdd", "vdd-io".
+  - compatible: should be "qcom,msm-sdcc"
+  - reg: should contain SDCC (mandatory), SDCC-DML (optional) and BAM
+    (optional) register maps.
+  - reg-names: indicates various resources passed to driver (via reg
+    property) by name. "reg-names" examples are "core_mem", "dml_mem"
+    and "bam_mem". "dml_mem" and "bam_mem" are optional, and the SDCC
+    driver will default to PIO mode when neither are present.
+  - interrupts: should contain SDCC core interrupt.
+  - interrupt-names: indicates interrupts passed to driver (via interrupts
+    property) by name. "core_irq" is mandatory, "bam_irq" is mandatory only
+    when BAM DMA engine is used. "status_irq" and "sdiowakeup_irq" are
+    optional.
+  - qcom,clk-rates: specifies supported SDCC clock frequencies, Units - Hz.
+  - qcom,sup-voltages: specifies supported voltage ranges for card. Should
+    always be specified in pairs (min, max), Units - mV.
+  - <supply-name>-supply: phandle to the regulator device tree node.
+    "supply-name" examples are "vdd", "vdd-io".
 
 Optional Properties:
 	- cell-index - defines slot ID.
@@ -24,6 +33,8 @@ Optional Properties:
 	- qcom,sdcc-bus-speed-mode - specifies supported bus speed modes by host.
 	- qcom,sdcc-current-limit - specifies max. current the host can drive.
 	- qcom,sdcc-xpc - specifies if the host can supply more than 150mA for SDXC cards.
+	- qcom,dat1-mpm-int - specifies MPM interrupt number corresponding to DAT1 line of SDCC
+					(used only if slot has dedicated DAT1 MSM pin (not GPIO))
 
 In the following, <supply> can be vdd (flash core voltage) or vdd-io (I/O voltage).
 	- qcom,sdcc-<supply>-always_on - specifies whether supply should be kept "on" always.
