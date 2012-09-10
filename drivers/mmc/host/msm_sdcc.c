@@ -187,6 +187,8 @@ static void msmsdcc_dump_sdcc_state(struct msmsdcc_host *host);
 static void msmsdcc_sg_start(struct msmsdcc_host *host);
 static int msmsdcc_vreg_reset(struct msmsdcc_host *host);
 static int msmsdcc_runtime_resume(struct device *dev);
+static int msmsdcc_dt_get_array(struct device *dev, const char *prop_name,
+		u32 **out_array, int *len, int size);
 static int msmsdcc_execute_tuning(struct mmc_host *mmc, u32 opcode);
 static bool msmsdcc_is_wait_for_auto_prog_done(struct msmsdcc_host *host,
 					       struct mmc_request *mrq);
@@ -998,7 +1000,7 @@ static int msmsdcc_config_dma(struct msmsdcc_host *host, struct mmc_data *data)
 	if ((host->dma.channel == -1) || (host->dma.crci == -1))
 		return -ENOENT;
 
-	BUG_ON((host->pdev_id < 1) || (host->pdev_id > 5));
+	BUG_ON((host->pdev->id < 1) || (host->pdev->id > 5));
 
 	host->dma.sg = data->sg;
 	host->dma.num_ents = data->sg_len;
@@ -1477,7 +1479,7 @@ msmsdcc_data_err(struct msmsdcc_host *host, struct mmc_data *data,
 		}
 		/* In case of DATA CRC/timeout error, execute tuning again */
 #if defined (CONFIG_BCM4335)||defined (CONFIG_BCM4335_MODULE)
-		if (host->tuning_needed && !host->tuning_in_progress&&(host->pdev_id != 3))
+		if (host->tuning_needed && !host->tuning_in_progress&&(host->pdev->id != 3))
 #else
 		if (host->tuning_needed && !host->tuning_in_progress)
 #endif
@@ -1841,7 +1843,7 @@ static void msmsdcc_do_cmdirq(struct msmsdcc_host *host, uint32_t status)
 		msmsdcc_dump_sdcc_state(host);
 
 #if defined(CONFIG_BCM4335) || defined(CONFIG_BCM4335_MODULE)
-		if( host->pdev_id == 3){
+		if( host->pdev->id == 3){
 			printk("%s: Skipped tuning.\n",mmc_hostname(host->mmc));
 		}
 #else
@@ -2496,7 +2498,7 @@ static int msmsdcc_vreg_init(struct msmsdcc_host *host, bool is_init)
 		rc = msmsdcc_vreg_reset(host);
 		if (rc)
 			pr_err("msmsdcc.%d vreg reset failed (%d)\n",
-			       host->pdev_id, rc);
+			       host->pdev->id, rc);
 		goto out;
 	} else {
 		/* Deregister all regulators from regulator framework */
@@ -2606,18 +2608,18 @@ static int msmsdcc_setup_vreg(struct msmsdcc_host *host, bool enable,
 #if defined(CONFIG_MACH_JF_ATT) || defined(CONFIG_MACH_JF_TMO) || defined(CONFIG_MACH_JF_EUR) || \
 	defined(CONFIG_MACH_JACTIVE_ATT) || defined(CONFIG_MACH_JACTIVE_EUR)
 		if (system_rev != BOARD_REV07) { /* TI Level Shifter */
-			if (system_rev < BOARD_REV08 && host->pdev_id == 4)
+			if (system_rev < BOARD_REV08 && host->pdev->id == 4)
 #else /* VZW/SPT/USCC */
 		if (system_rev != BOARD_REV08) { /* TI Level Shifter */
-			if (system_rev < BOARD_REV09 && host->pdev_id == 4)
+			if (system_rev < BOARD_REV09 && host->pdev->id == 4)
 #endif
 				/* Disable level shifter */
 				gpio_set_value(60, 0); /* TFLASH_LS_EN */
 #if defined(CONFIG_MACH_JF_ATT) || defined(CONFIG_MACH_JF_TMO) || defined(CONFIG_MACH_JF_EUR) || \
 	defined(CONFIG_MACH_JACTIVE_ATT) || defined(CONFIG_MACH_JACTIVE_EUR)
-			else if (system_rev >= BOARD_REV08 && host->pdev_id == 2)
+			else if (system_rev >= BOARD_REV08 && host->pdev->id == 2)
 #else /* VZW/SPT/USCC/KOR */
-			else if (system_rev >= BOARD_REV09 && host->pdev_id == 2)
+			else if (system_rev >= BOARD_REV09 && host->pdev->id == 2)
 #endif
 #if defined(CONFIG_MACH_JF_DCM)
 				ice_gpiox_set(FPGA_GPIO_TFLASH_LS_EN, 0);
@@ -2651,17 +2653,17 @@ static int msmsdcc_setup_vreg(struct msmsdcc_host *host, bool enable,
 		mdelay(1);
 #if defined(CONFIG_MACH_JF_ATT) || defined(CONFIG_MACH_JF_TMO) || defined(CONFIG_MACH_JF_EUR) || \
 	defined(CONFIG_MACH_JACTIVE_ATT) || defined(CONFIG_MACH_JACTIVE_EUR)
-		if (system_rev < BOARD_REV08 && host->pdev_id == 4)
+		if (system_rev < BOARD_REV08 && host->pdev->id == 4)
 #else /* VZW/SPT/USCC */
-		if (system_rev < BOARD_REV09 && host->pdev_id == 4)
+		if (system_rev < BOARD_REV09 && host->pdev->id == 4)
 #endif
 			/* Enable level shifter */
 			gpio_set_value(60, 1); /* TFLASH_LS_EN */
 #if defined(CONFIG_MACH_JF_ATT) || defined(CONFIG_MACH_JF_TMO) || defined(CONFIG_MACH_JF_EUR) || \
 	defined(CONFIG_MACH_JACTIVE_ATT) || defined(CONFIG_MACH_JACTIVE_EUR)
-		else if (system_rev >= BOARD_REV08 && host->pdev_id == 2)
+		else if (system_rev >= BOARD_REV08 && host->pdev->id == 2)
 #else /* VZW/SPT/USCC/KOR */
-		else if (system_rev >= BOARD_REV09 && host->pdev_id == 2)
+		else if (system_rev >= BOARD_REV09 && host->pdev->id == 2)
 #endif
 #if defined(CONFIG_MACH_JF_DCM)
 			ice_gpiox_set(FPGA_GPIO_TFLASH_LS_EN, 1);
@@ -2676,10 +2678,10 @@ static int msmsdcc_setup_vreg(struct msmsdcc_host *host, bool enable,
 #if defined(CONFIG_MACH_JF_ATT) || defined(CONFIG_MACH_JF_TMO) || defined(CONFIG_MACH_JF_EUR) || \
 	defined(CONFIG_MACH_JACTIVE_ATT) || defined(CONFIG_MACH_JACTIVE_EUR)
 		if (system_rev == BOARD_REV07) { /* Toshiba Level Shifter */
-			if (system_rev < BOARD_REV08 && host->pdev_id == 4)
+			if (system_rev < BOARD_REV08 && host->pdev->id == 4)
 #else /* VZW/SPT/USCC */
 		if (system_rev == BOARD_REV08) { /* Toshiba Level Shifter */
-			if (system_rev < BOARD_REV09 && host->pdev_id == 4)
+			if (system_rev < BOARD_REV09 && host->pdev->id == 4)
 #endif
 				/* Disable level shifter */
 				gpio_set_value(60, 0); /* TFLASH_LS_EN */
@@ -3214,6 +3216,27 @@ static int msmsdcc_msm_bus_register(struct msmsdcc_host *host)
 	int rc = 0;
 	struct msm_bus_scale_pdata *use_cases;
 
+	if (host->pdev->dev.of_node) {
+		struct msm_mmc_bus_voting_data *data;
+		struct device *dev = &host->pdev->dev;
+
+		data = devm_kzalloc(dev,
+			sizeof(struct msm_mmc_bus_voting_data), GFP_KERNEL);
+		if (!data) {
+			dev_err(&host->pdev->dev,
+				"%s: failed to allocate memory\n", __func__);
+			rc = -ENOMEM;
+			goto out;
+		}
+
+		rc = msmsdcc_dt_get_array(dev, "qcom,bus-bw-vectors-bps",
+				&data->bw_vecs, &data->bw_vecs_size, 0);
+		if (!rc) {
+			data->use_cases = msm_bus_cl_get_pdata(host->pdev);
+			host->plat->msm_bus_voting_data = data;
+		}
+	}
+
 	if (host->plat->msm_bus_voting_data &&
 	    host->plat->msm_bus_voting_data->use_cases &&
 	    host->plat->msm_bus_voting_data->bw_vecs &&
@@ -3236,7 +3259,7 @@ static int msmsdcc_msm_bus_register(struct msmsdcc_host *host)
 		host->msm_bus_vote.max_bw_vote =
 				msmsdcc_msm_bus_get_vote_for_bw(host, UINT_MAX);
 	}
-
+out:
 	return rc;
 }
 
@@ -4401,7 +4424,7 @@ kfree:
 out:
 	spin_lock_irqsave(&host->lock, flags);
 	host->tuning_in_progress = 0;
-	if (!rc || (host->pdev_id == 3))
+	if (!rc || (host->pdev->id == 3))
 		host->tuning_done = true;
 	spin_unlock_irqrestore(&host->lock, flags);
 exit:
@@ -5979,7 +6002,7 @@ msmsdcc_probe(struct platform_device *pdev)
 	}
 
 	host = mmc_priv(mmc);
-	host->pdev_id = pdev->id;
+	host->pdev = pdev;
 	host->plat = plat;
 	host->mmc = mmc;
 	host->curr.cmd = NULL;
@@ -6296,18 +6319,18 @@ msmsdcc_probe(struct platform_device *pdev)
 
 /* SYSFS about SD Card Detection by soonil.lim */
 #ifndef CONFIG_MMC_MSM_SDC4_SUPPORT
-	if (t_flash_detect_dev == NULL && (host->pdev_id == 3)) {
+	if (t_flash_detect_dev == NULL && (host->pdev->id == 3)) {
 #else
 
 #if defined(CONFIG_MACH_JF_ATT) || defined(CONFIG_MACH_JF_TMO) || defined(CONFIG_MACH_JF_EUR) || \
 	defined(CONFIG_MACH_JACTIVE_ATT) || defined(CONFIG_MACH_JACTIVE_EUR)
 	if (t_flash_detect_dev == NULL &&
-		(((host->pdev_id == 4) && (system_rev < BOARD_REV08)) ||
-		((host->pdev_id == 2) && (system_rev >= BOARD_REV08)))) {
+		(((host->pdev->id == 4) && (system_rev < BOARD_REV08)) ||
+		((host->pdev->id == 2) && (system_rev >= BOARD_REV08)))) {
 #else /* VZW/SPT/USCC */
 	if (t_flash_detect_dev == NULL &&
-		(((host->pdev_id == 4) && (system_rev < BOARD_REV09)) ||
-		((host->pdev_id == 2) && (system_rev >= BOARD_REV09)))) {
+		(((host->pdev->id == 4) && (system_rev < BOARD_REV09)) ||
+		((host->pdev->id == 2) && (system_rev >= BOARD_REV09)))) {
 #endif
 
 #endif
@@ -6715,7 +6738,7 @@ static inline void msmsdcc_gate_clock(struct msmsdcc_host *host)
 	struct mmc_host *mmc = host->mmc;
 	unsigned long flags;
 
-	if (host->pdev_id == 3) {
+	if (host->pdev->id == 3) {
 		printk(KERN_INFO "%s: msmsdcc_gate_clock due to mmc_card_keep_power\n", __func__);
 	}
 
@@ -6788,7 +6811,7 @@ msmsdcc_runtime_suspend(struct device *dev)
 	}
 
 #if defined(CONFIG_BCM4335) || defined(CONFIG_BCM4335_MODULE)
-	if (host->pdev_id == 3) {
+	if (host->pdev->id == 3) {
 		host->mmc->pm_flags |= MMC_PM_KEEP_POWER;
 		printk(KERN_INFO "%s: Enter WIFI suspend\n", __func__);
 	}
@@ -6864,7 +6887,7 @@ msmsdcc_runtime_resume(struct device *dev)
 	if (host->plat->is_sdio_al_client)
 		goto out;
 
-	if (host->pdev_id == 3) {
+	if (host->pdev->id == 3) {
 		printk(KERN_INFO "%s: Enter WIFI resume\n", __func__);
 	}
 
@@ -6873,7 +6896,7 @@ msmsdcc_runtime_resume(struct device *dev)
 		if (mmc->card && mmc_card_sdio(mmc->card) &&
 				mmc_card_keep_power(mmc)) {
 			msmsdcc_ungate_clock(host);
-			if (host->pdev_id == 3) {
+			if (host->pdev->id == 3) {
 				printk(KERN_INFO "%s: To check whether skip the WIFI resume in mmc_card_keep_power\n", __func__);
 			}
 		}
