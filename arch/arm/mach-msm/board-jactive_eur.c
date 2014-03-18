@@ -111,6 +111,7 @@
 #include "devices-msm8x60.h"
 #include "smd_private.h"
 #include "sysmon.h"
+#include <linux/bluetooth-power.h>
 
 #if defined(CONFIG_VIDEO_MHL_V2)
 #include <linux/sii8240.h>
@@ -5164,6 +5165,36 @@ static void __init apq8064ab_update_retention_spm(void)
 	}
 }
 
+static void __init apq8064_bt_power_init(void)
+{
+	struct device *dev;
+
+	bt_power_pdata =
+		kzalloc(sizeof(struct bluetooth_power_platform_data),
+			GFP_KERNEL);
+
+	if (!bt_power_pdata) {
+		pr_err("%s: Failed to allocate memory", __func__);
+		return;
+	}
+
+	bt_power_pdata->bt_gpio_sys_rst = QCA6174_BT_RST_N;
+	bt_power_pdata->bt_vdd_io = NULL;
+	bt_power_pdata->bt_vdd_pa = NULL;
+	bt_power_pdata->bt_vdd_ldo = NULL;
+	bt_power_pdata->bt_chip_pwd = NULL;
+	bt_power_pdata->bt_power_setup = NULL;
+
+	dev = &msm_bt_power_device.dev;
+	dev->platform_data = bt_power_pdata;
+
+	if (platform_device_register(&msm_bt_power_device) < 0)
+		pr_err("%s: Platform dev. registration failed\n", __func__);
+	else
+		pr_err("\n%s: ***** Platform dev. registration success *****\n", __func__);
+
+}
+
 static void __init apq8064_common_init(void)
 {
 	u32 platform_version = socinfo_get_platform_version();
@@ -5210,6 +5241,9 @@ static void __init apq8064_common_init(void)
 	register_i2c_devices();
 
 	apq8064_init_pmic();
+
+	apq8064_bt_power_init();
+
 	if (machine_is_apq8064_liquid())
 		msm_otg_pdata.mhl_enable = true;
 
