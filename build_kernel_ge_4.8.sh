@@ -15,9 +15,9 @@ export PACKAGEDIR=$KERNELDIR/READY-JB
 export USE_SEC_FIPS_MODE=true
 export ARCH=arm
 export CROSS_COMPILE=$PARENT_DIR/../arm-eabi-4.8/bin/arm-eabi-
-export KERNEL_CONFIG=alucard_defconfig;
+export KERNEL_CONFIG=alucard_ge_defconfig;
 
-sh switchbranchon.sh tw-4.4;
+sh switchbranchon.sh ge-4.4;
 
 chmod -R 777 /tmp;
 
@@ -77,7 +77,7 @@ fi;
 . $KERNELDIR/.config;
 
 # get version from config
-GETVER=`grep 'Alucard-*-V' .config |sed 's/Alucard-//g' | sed 's/.*".//g' | sed 's/-T.*//g'`;
+GETVER=`grep 'Alucard-*-V' .config |sed 's/Alucard-//g' | sed 's/.*".//g' | sed 's/-G.*//g'`;
 
 echo "Remove old zImage"
 # remove previous zImage files
@@ -130,7 +130,7 @@ if [ -e $KERNELDIR/arch/arm/boot/zImage ]; then
 	 rm $i;
 	done;
 
-	FILENAME=Kernel-Alucard-${GETVER}-`date +"[%H-%M]-[%d-%m]-TW-EUR-KK4.4-SGIV-PWR-CORE"`.zip
+	FILENAME=Kernel-Alucard-${GETVER}-`date +"[%H-%M]-[%d-%m]-GE-EUR-KK4.4-SGIV-PWR-CORE"`.zip
 	zip -r $FILENAME .;
 
 	time_end=$(date +%s.%N)

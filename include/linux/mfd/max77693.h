@@ -129,6 +129,10 @@ struct max77693_muic_data {
 	 bool(*is_mhl_attached) (void);
 	int (*cfg_uart_gpio) (void);
 	void (*jig_uart_cb) (int path);
+#if defined(CONFIG_MUIC_DET_JACK)
+	void (*earjack_cb) (int attached);
+	void (*earjackkey_cb) (int pressed, unsigned int code);
+#endif
 	int (*host_notify_cb) (int enable);
 	int gpio_usb_sel;
 	int sw_path;
