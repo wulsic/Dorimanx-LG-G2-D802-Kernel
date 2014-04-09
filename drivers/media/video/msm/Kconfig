@@ -112,12 +112,12 @@ choice
 
 config MSM_CAMERA_AF_FOXCONN
 	bool "FOXCONN Module"
-	help
+	---help---
 	  This driver supports FOXCONN AF module for 5M Bayer sensor
 
 config MSM_CAMERA_AF_BAM
 	bool "BAM Module"
-	help
+	---help---
 	  This driver supports BAM AF module for 5M Bayer sensor
 
 endchoice

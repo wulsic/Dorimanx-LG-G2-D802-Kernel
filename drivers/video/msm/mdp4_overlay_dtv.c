@@ -31,7 +31,6 @@
 #include "msm_fb.h"
 #include "hdmi_msm.h"
 #include "mdp4.h"
-#include "hdmi_msm.h"
 
 #define DTV_BASE	0xD0000
 
@@ -378,7 +377,6 @@ void mdp4_dtv_wait4vsync(int cndx)
 
 	mdp4_dtv_vsync_irq_ctrl(cndx, 0);
 	mdp4_stat.wait4vsync1++;
-	
 }
 
 static void mdp4_dtv_wait4dmae(int cndx)
@@ -848,8 +846,8 @@ static void mdp4_overlay_dtv_alloc_pipe(struct msm_fb_data_type *mfd,
 
 	mdp4_overlay_mdp_pipe_req(pipe, mfd);
 	mdp4_calc_blt_mdp_bw(mfd, pipe);
-	mdp4_overlay_mdp_perf_req(mfd);
-	mdp4_overlay_mdp_perf_upd(mfd, 1);
+//	mdp4_overlay_mdp_perf_req(mfd, pipe);//need_check
+//	mdp4_overlay_mdp_perf_upd(mfd, 1);
 
 	ret = mdp4_overlay_format2pipe(pipe);
 	if (ret < 0)

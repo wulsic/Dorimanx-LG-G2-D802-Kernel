@@ -311,13 +311,6 @@ static int msm_ctrl_cmd_done(void *arg)
 		goto ctrl_cmd_done_error;
 	}
 
-	if(command->queue_idx < 0 ||
-		command->queue_idx >= MAX_NUM_ACTIVE_CAMERA) {
-		pr_err("%s: Invalid value OR index %d\n", __func__,
-		  command->queue_idx);
-		goto ctrl_cmd_done_error;
-	}
-
 	if (!g_server_dev.server_queue[command->queue_idx].queue_active) {
 		pr_err("%s: Invalid queue\n", __func__);
 		goto ctrl_cmd_done_error;
@@ -346,8 +339,7 @@ static int msm_ctrl_cmd_done(void *arg)
 				max_control_command_size);
 			goto ctrl_cmd_done_error;
 		}
-		if (copy_from_user(command->value, (void __user *)uptr,
-			command->length)) {
+		if (copy_from_user(command->value, uptr, command->length)) {
 			pr_err("%s: copy_from_user failed, size=%d\n",
 				__func__, sizeof(struct msm_ctrl_cmd));
 			goto ctrl_cmd_done_error;
@@ -1060,7 +1052,7 @@ int msm_server_v4l2_subscribe_event(struct v4l2_fh *fh,
 		sub->type = V4L2_EVENT_PRIVATE_START + MSM_CAM_RESP_CTRL;
 		D("sub->type start = 0x%x\n", sub->type);
 		do {
-			rc = v4l2_event_subscribe(fh, sub, 100);
+			rc = v4l2_event_subscribe(fh, sub, 30);
 			if (rc < 0) {
 				D("%s: failed for evtType = 0x%x, rc = %d\n",
 						__func__, sub->type, rc);
@@ -1077,7 +1069,7 @@ int msm_server_v4l2_subscribe_event(struct v4l2_fh *fh,
 			V4L2_EVENT_PRIVATE_START + MSM_SVR_RESP_MAX);
 	} else {
 		D("sub->type not V4L2_EVENT_ALL = 0x%x\n", sub->type);
-		rc = v4l2_event_subscribe(fh, sub, 100);
+		rc = v4l2_event_subscribe(fh, sub, 30);
 		if (rc < 0)
 			D("%s: failed for evtType = 0x%x, rc = %d\n",
 						__func__, sub->type, rc);
@@ -1351,15 +1343,6 @@ static long msm_ioctl_server(struct file *file, void *fh,
 		}
 
 		mutex_lock(&g_server_dev.server_queue_lock);
-
-		if(u_isp_event.isp_data.ctrl.queue_idx < 0 ||
-		u_isp_event.isp_data.ctrl.queue_idx >= MAX_NUM_ACTIVE_CAMERA) {
-			pr_err("%s: Invalid index %d\n", __func__,
-				u_isp_event.isp_data.ctrl.queue_idx);
-			rc = -EINVAL;
-			return rc;
-		}
-
 		if (!g_server_dev.server_queue
 			[u_isp_event.isp_data.ctrl.queue_idx].queue_active) {
 			pr_err("%s: Invalid queue\n", __func__);
@@ -1427,9 +1410,11 @@ static long msm_ioctl_server(struct file *file, void *fh,
 		break;
 
 	case MSM_CAM_IOCTL_V4L2_EVT_NATIVE_CMD:
-		//pr_err("%s: MSM_CAM_IOCTL_V4L2_EVT_NATIVE_CMD : %d\n",
-		//	__func__, _IOC_NR(cmd));
+		pr_err("%s: MSM_CAM_IOCTL_V4L2_EVT_NATIVE_CMD : %d\n",
+			__func__, _IOC_NR(cmd));
+#if !defined(CONFIG_MACH_MELIUS)
 		sensor_native_control(arg);
+#endif
 		rc = 0;
 		break;
 	case MSM_CAM_IOCTL_V4L2_EVT_NATIVE_FRONT_CMD:
@@ -1555,9 +1540,9 @@ int msm_server_update_sensor_info(struct msm_cam_v4l2_device *pcam,
 	  device info*/
 	snprintf(pcam->media_dev.serial,
 			sizeof(pcam->media_dev.serial),
-			"%s-%d-%d-%d", QCAMERA_NAME,
+			"%s-%d-%d", QCAMERA_NAME,
 			sdata->sensor_platform_info->mount_angle,
-			sdata->camera_type,sdata->sensor_type);
+			sdata->camera_type);
 
 	g_server_dev.camera_info.num_cameras++;
 	g_server_dev.mctl_node_info.num_mctl_nodes++;
@@ -2630,7 +2615,6 @@ int msm_server_open_client(int *p_qidx)
 		MAX_SERVER_PAYLOAD_LENGTH, GFP_KERNEL);
 	if (!queue->ctrl_data) {
 		pr_err("%s: Could not find memory\n", __func__);
-		mutex_unlock(&g_server_dev.server_lock);
 		return -ENOMEM;
 	}
 	msm_queue_init(&queue->ctrl_q, "control");
@@ -2649,16 +2633,12 @@ int msm_server_send_ctrl(struct msm_ctrl_cmd *out,
 	struct msm_queue_cmd *event_qcmd;
 	struct msm_ctrl_cmd *ctrlcmd;
 	struct msm_cam_server_dev *server_dev = &g_server_dev;
-	struct msm_device_queue *queue;
+	struct msm_device_queue *queue =
+		&server_dev->server_queue[out->queue_idx].ctrl_q;
+
 	struct v4l2_event v4l2_evt;
 	struct msm_isp_event_ctrl *isp_event;
 	void *ctrlcmd_data;
-
-	if(out->queue_idx < 0 || out->queue_idx >= MAX_NUM_ACTIVE_CAMERA) {
-		pr_err("%s: Invalid index %d\n", __func__, out->queue_idx);
-		return -EINVAL;
-	}
-	queue = &server_dev->server_queue[out->queue_idx].ctrl_q;
 
 	event_qcmd = kzalloc(sizeof(struct msm_queue_cmd), GFP_KERNEL);
 	if (!event_qcmd) {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2013, Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -214,7 +214,7 @@ static int msm_hsusb_config_vddcx(int high)
 		return ret;
 	}
 
-	pr_info("FAST_CHARGE-%s: min_vol:%d max_vol:%d\n", __func__, min_vol, max_vol);
+	pr_info("%s: min_vol:%d max_vol:%d\n", __func__, min_vol, max_vol);
 
 	return ret;
 }

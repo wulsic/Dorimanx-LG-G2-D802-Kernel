@@ -1,4 +1,5 @@
-/* Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
+/*
+ * Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -32,7 +33,10 @@
 #include "mdp.h"
 #include "msm_fb.h"
 #include "mdp4.h"
-
+#define CSC_MV_OFF	0x400
+#define CSC_BV_OFF	0x500
+#define CSC_LV_OFF	0x600
+#define CSC_POST_OFF	0x80
 struct mdp4_statistic mdp4_stat;
 
 struct mdp_csc_cfg_data csc_cfg_matrix[CSC_MAX_BLOCKS] = {
@@ -199,13 +203,14 @@ void mdp4_sw_reset(ulong bits)
 
 	bits &= 0x1f;	/* 5 bits */
 	outpdw(MDP_BASE + 0x001c, bits);	/* MDP_SW_RESET */
+	wmb();
 
 	while (inpdw(MDP_BASE + 0x001c) & bits) /* self clear when complete */
 		;
 	/* MDP cmd block disable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
-	MSM_FB_DEBUG("mdp4_sw_reset: 0x%x\n", (int)bits);
+	pr_debug("mdp4_sw_reset: 0x%x\n", (int)bits);
 }
 
 void mdp4_overlay_cfg(int overlayer, int blt_mode, int refresh, int direct_out)
@@ -507,6 +512,7 @@ void mdp4_hw_init(void)
 	/* MDP cmd block enable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 	mdp_clk_ctrl(1);
+	mdp_bus_scale_restore_request();
 
 #ifdef MDP4_ERROR
 	/*
@@ -558,6 +564,8 @@ void mdp4_hw_init(void)
 
 	/* max read pending cmd config */
 	outpdw(MDP_BASE + 0x004c, 0x02222);	/* 3 pending requests */
+	outpdw(MDP_BASE + 0x0400, 0x7FF);
+	outpdw(MDP_BASE + 0x0404, 0x30050);
 
 #ifndef CONFIG_FB_MSM_OVERLAY
 	/* both REFRESH_MODE and DIRECT_OUT are ignored at BLT mode */
@@ -1505,6 +1513,14 @@ struct mdp_csc_cfg mdp_csc_convert[4] = {
 	},
 };
 
+void mdp4_vg_csc_restore(void)
+{
+        int i;
+
+        for (i = 0; i < CSC_MAX_BLOCKS; i++)
+                mdp4_csc_config(&csc_cfg_matrix[i]);
+}
+
 
 void mdp4_vg_csc_update(struct mdp_csc *p)
 {
@@ -2327,6 +2343,11 @@ int mdp4_csc_enable(struct mdp_csc_cfg_data *config)
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 	return 0;
 }
+
+#define CSC_MV_OFF	0x400
+#define CSC_BV_OFF	0x500
+#define CSC_LV_OFF	0x600
+#define CSC_POST_OFF	0x80
 
 void mdp4_csc_write(struct mdp_csc_cfg *data, uint32_t base)
 {

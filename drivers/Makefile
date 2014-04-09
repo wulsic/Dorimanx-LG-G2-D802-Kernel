@@ -141,6 +141,7 @@ obj-$(CONFIG_PM_DEVFREQ)	+= devfreq/
 #MobiCore
 obj-$(CONFIG_MOBICORE_SUPPORT)  += gud/
 
+obj-$(CONFIG_INPUT_YAS_SENSORS)		+= sensors/
 obj-$(CONFIG_BATTERY_SAMSUNG)	+= battery/
 obj-$(CONFIG_SENSORS_SSP)	+= sensorhub/
 obj-$(CONFIG_VIBETONZ)          += motor/

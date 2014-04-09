@@ -213,34 +213,10 @@ static void vibetonz_start(void)
 	timer.function = vibetonz_timer_func;
 
 	ret = timed_output_dev_register(&timed_output_vt);
-	if (ret < 0)
-		DbgOut((KERN_ERR
-		"tspdrv: timed_output_dev_register fail\n"));
 
-    ret = device_create_file(timed_output_vt.dev, &dev_attr_pwm_value);
-	if (ret < 0)
+	if (ret)
 		DbgOut((KERN_ERR
-		"tspdrv: device_create_file fail: pwm_value\n"));
-    
-    ret = device_create_file(timed_output_vt.dev, &dev_attr_pwm_max);
-	if (ret < 0) {
-		pr_err("vibrator_init(): create sysfs fail: pwm_max\n");
-	}
-    
-	ret = device_create_file(timed_output_vt.dev, &dev_attr_pwm_min);
-	if (ret < 0) {
-		pr_err("vibrator_init(): create sysfs fail: pwm_min\n");
-	}
-    
-	ret = device_create_file(timed_output_vt.dev, &dev_attr_pwm_default);
-	if (ret < 0) {
-		pr_err("vibrator_init(): create sysfs fail: pwm_default\n");
-	}
-    
-	ret = device_create_file(timed_output_vt.dev, &dev_attr_pwm_threshold);
-	if (ret < 0) {
-		pr_err("vibrator_init(): create sysfs fail: pwm_threshold\n");
-	}
+		"tspdrv: timed_output_dev_register is fail\n"));
 }
 
 /* File IO */
@@ -325,6 +301,8 @@ static __devinit int tspdrv_probe(struct platform_device *pdev)
 {
 	struct vibrator_platform_data *pdata;
 	int ret, i;   /* initialized below */
+
+	create_vibrator_sysfs();
 
 	DbgOut((KERN_INFO "tspdrv: tspdrv_probe.\n"));
 
@@ -502,7 +480,6 @@ static ssize_t write(struct file *file, const char *buf, size_t count,
 			** (Should never happen).
 			*/
 			DbgOut((KERN_EMERG "tspdrv: invalid buffer index.\n"));
-			return 0;
 		}
 
 		/* Check bit depth */
@@ -523,7 +500,6 @@ static ssize_t write(struct file *file, const char *buf, size_t count,
 			** (Should never happen).
 			*/
 			DbgOut((KERN_EMERG "tspdrv: invalid data size.\n"));
-			return 0;
 		}
 
 		/* Check actuator index */
@@ -623,6 +599,7 @@ static long ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		break;
 
 	case TSPDRV_MAGIC_NUMBER:
+	case TSPDRV_SET_MAGIC_NUMBER:
 		filp->private_data = (void *)TSPDRV_MAGIC_NUMBER;
 		break;
 
