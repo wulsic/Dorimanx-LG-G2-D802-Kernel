@@ -30,7 +30,9 @@
 #include <linux/dvfs_touch_if.h>
 #ifdef CONFIG_SEC_DVFS_BOOSTER
 static int prev_min_touch_limit = DVFS_MIN_TOUCH_LIMIT;
+static int prev_min_touch_high_limit = DVFS_MIN_TOUCH_HIGH_LIMIT;
 static int prev_min_touch_limit_second = DVFS_MIN_TOUCH_LIMIT_SECOND;
+static int prev_min_touch_high_limit_second = DVFS_MIN_TOUCH_HIGH_LIMIT_SECOND;
 #endif
 
 #define DRIVER_NAME "synaptics_rmi4_i2c"
@@ -621,6 +623,7 @@ static void synaptics_change_dvfs_lock(struct work_struct *work)
 			struct synaptics_rmi4_data, work_dvfs_chg.work);
 	int retval = 0;
 	int min_touch_limit_second = 0;
+	int min_touch_high_limit_second = 0;
 
 	mutex_lock(&rmi4_data->dvfs_lock);
 
@@ -630,7 +633,7 @@ static void synaptics_change_dvfs_lock(struct work_struct *work)
 				"%s: do fw update, do not change cpu frequency.\n",
 				__func__);
 		} else {
-			min_touch_limit_second = atomic_read(&dvfs_min_touch_limit_second);
+			min_touch_limit_second = atomic_read(&dvfs_min_limit_second);
 			if (min_touch_limit_second < CPU_MIN_FREQ || min_touch_limit_second > CPU_MAX_FREQ) {
 				min_touch_limit_second = prev_min_touch_limit_second;
 			} else {
@@ -639,6 +642,22 @@ static void synaptics_change_dvfs_lock(struct work_struct *work)
 			retval = set_freq_limit(DVFS_TOUCH_ID,
 					min_touch_limit_second);
 			rmi4_data->dvfs_freq = min_touch_limit_second;
+		}
+	} else if (rmi4_data->dvfs_boost_mode == DVFS_STAGE_NINTH) {
+		if (rmi4_data->stay_awake) {
+			dev_info(&rmi4_data->i2c_client->dev,
+				"%s: do fw update, do not change cpu frequency.\n",
+				__func__);
+		} else {
+			min_touch_high_limit_second = atomic_read(&dvfs_min_high_limit_second);
+			if (min_touch_high_limit_second < CPU_MIN_FREQ || min_touch_high_limit_second > CPU_MAX_FREQ) {
+				min_touch_high_limit_second = prev_min_touch_high_limit_second;
+			} else {
+				prev_min_touch_high_limit_second = min_touch_high_limit_second;
+			}
+			retval = set_freq_limit(DVFS_TOUCH_ID,
+				min_touch_high_limit_second);
+			rmi4_data->dvfs_freq = min_touch_high_limit_second;
 		}
 	} else if (rmi4_data->dvfs_boost_mode == DVFS_STAGE_SINGLE) {
 		retval = set_freq_limit(DVFS_TOUCH_ID, -1);
@@ -685,7 +704,9 @@ static void synaptics_set_dvfs_lock(struct synaptics_rmi4_data *rmi4_data,
 {
 	int ret = 0;
 	int min_touch_limit = 0;
+	int min_touch_high_limit = 0;
 	int touch_booster_time = 0;
+	int touch_booster_high_time = 0;
 	int dvfs_boost_lvl = 0;
 
 	dvfs_boost_lvl = atomic_read(&dvfs_boost_mode);
@@ -703,9 +724,15 @@ static void synaptics_set_dvfs_lock(struct synaptics_rmi4_data *rmi4_data,
 	mutex_lock(&rmi4_data->dvfs_lock);
 	if (on == 0) {
 		if (rmi4_data->dvfs_lock_status) {
-			touch_booster_time = atomic_read(&syn_touch_booster_off_time);
-			schedule_delayed_work(&rmi4_data->work_dvfs_off,
-				msecs_to_jiffies(touch_booster_time));
+			if (rmi4_data->dvfs_boost_mode == DVFS_STAGE_NINTH) {
+				touch_booster_high_time = atomic_read(&syn_high_off_time);
+				schedule_delayed_work(&rmi4_data->work_dvfs_off,
+					msecs_to_jiffies(touch_booster_high_time));
+			} else {
+				touch_booster_time = atomic_read(&syn_off_time);
+				schedule_delayed_work(&rmi4_data->work_dvfs_off,
+					msecs_to_jiffies(touch_booster_time));
+			}
 		}
 	} else if (on > 0) {
 		cancel_delayed_work(&rmi4_data->work_dvfs_off);
@@ -713,27 +740,53 @@ static void synaptics_set_dvfs_lock(struct synaptics_rmi4_data *rmi4_data,
 		if (rmi4_data->dvfs_old_stauts != on) {
 			cancel_delayed_work(&rmi4_data->work_dvfs_chg);
 			if (1/*!rmi4_data->dvfs_lock_status*/) {
-				min_touch_limit = atomic_read(&dvfs_min_touch_limit);
+				min_touch_limit = atomic_read(&dvfs_min_limit);
 				if (min_touch_limit < CPU_MIN_FREQ || min_touch_limit > CPU_MAX_FREQ) {
 					min_touch_limit = prev_min_touch_limit;
 				} else {
 					prev_min_touch_limit = min_touch_limit;
 				}
-				if (rmi4_data->dvfs_freq != min_touch_limit) {
+				min_touch_high_limit = atomic_read(&dvfs_min_high_limit);
+				if (min_touch_high_limit < CPU_MIN_FREQ || min_touch_high_limit > CPU_MAX_FREQ) {
+					min_touch_high_limit = prev_min_touch_high_limit;
+				} else {
+					prev_min_touch_high_limit = min_touch_high_limit;
+				}
+				if ((rmi4_data->dvfs_freq != min_touch_limit)  &&
+					(rmi4_data->dvfs_boost_mode != DVFS_STAGE_NINTH)) {
 					ret = set_freq_limit(DVFS_TOUCH_ID,
 							min_touch_limit);
 					rmi4_data->dvfs_freq = min_touch_limit;
-
+#ifdef CONFIG_MSM_KGSL_KERNEL_API_ENABLE
+					kgsl_pwrctrl_min_pwrlevel_store_kernel(2);
+#endif
+					if (ret < 0)
+						dev_err(&rmi4_data->i2c_client->dev,
+							"%s: cpu first lock failed(%d)\n",
+							__func__, ret);
+				} else if ((rmi4_data->dvfs_freq != min_touch_high_limit) &&
+						(rmi4_data->dvfs_boost_mode == DVFS_STAGE_NINTH)) {
+					ret = set_freq_limit(DVFS_TOUCH_ID,
+								min_touch_high_limit);
+					rmi4_data->dvfs_freq = min_touch_high_limit;
+#ifdef CONFIG_MSM_KGSL_KERNEL_API_ENABLE
+					kgsl_pwrctrl_min_pwrlevel_store_kernel(2);
+#endif
 					if (ret < 0)
 						dev_err(&rmi4_data->i2c_client->dev,
 							"%s: cpu first lock failed(%d)\n",
 							__func__, ret);
 				}
 
-				touch_booster_time = atomic_read(&syn_touch_booster_chg_time);
-				schedule_delayed_work(&rmi4_data->work_dvfs_chg,
-					msecs_to_jiffies(touch_booster_time));
-
+				if (rmi4_data->dvfs_boost_mode == DVFS_STAGE_NINTH) {
+					touch_booster_high_time = atomic_read(&syn_high_chg_time);
+					schedule_delayed_work(&rmi4_data->work_dvfs_chg,
+						msecs_to_jiffies(touch_booster_high_time));
+				} else {
+					touch_booster_time = atomic_read(&syn_chg_time);
+					schedule_delayed_work(&rmi4_data->work_dvfs_chg,
+						msecs_to_jiffies(touch_booster_time));
+				}
 				rmi4_data->dvfs_lock_status = true;
 			}
 		}
@@ -1479,7 +1532,8 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 			wy = finger_data->wy;
 #ifdef EDGE_SWIPE
 			if (f51) {
-				if (f51->proximity_controls & HAS_EDGE_SWIPE) {
+				if ((f51->proximity_controls & HAS_EDGE_SWIPE)
+					&& f51->surface_data.palm) {
 					wx = f51->surface_data.wx;
 					wy = f51->surface_data.wy;
 				}
@@ -3477,12 +3531,10 @@ int synaptics_rmi4_reset_device(struct synaptics_rmi4_data *rmi4_data)
 			msleep(SYNAPTICS_HW_RESET_TIME);
 
 	} else {
-#if defined(CONFIG_TOUCHSCREEN_SYNAPTICS_PREVENT_HSYNC_LEAKAGE)
-		rmi4_data->board->hsync_onoff(false);
-#endif
 		rmi4_data->board->power(false);
 		msleep(30);
 		rmi4_data->board->power(true);
+		rmi4_data->current_page = MASK_8BIT;
 
 		/* A1(400msec) need more sleep time than B0(min 60msec) */
 		if (rmi4_data->ic_revision_of_ic == 0xB0)
@@ -3490,9 +3542,6 @@ int synaptics_rmi4_reset_device(struct synaptics_rmi4_data *rmi4_data)
 		else
 			msleep(SYNAPTICS_HW_RESET_TIME);
 
-#if defined(CONFIG_TOUCHSCREEN_SYNAPTICS_PREVENT_HSYNC_LEAKAGE)
-		rmi4_data->board->hsync_onoff(true);
-#endif
 		retval = synaptics_rmi4_f54_set_control(rmi4_data);
 		if (retval < 0)
 			dev_err(&rmi4_data->i2c_client->dev,
@@ -3812,14 +3861,8 @@ static int __devinit synaptics_rmi4_probe(struct i2c_client *client,
 	/* define panel version : M4 / M4+ */
 	rmi4_data->panel_revision = rmi4_data->board->panel_revision;
 
-#if defined(CONFIG_TOUCHSCREEN_SYNAPTICS_PREVENT_HSYNC_LEAKAGE)
-	rmi4_data->board->hsync_onoff(false);
-#endif
 	rmi4_data->board->power(true);
 
-#if defined(CONFIG_TOUCHSCREEN_SYNAPTICS_PREVENT_HSYNC_LEAKAGE)
-	rmi4_data->board->hsync_onoff(true);
-#endif
 	rmi4_data->i2c_read = synaptics_rmi4_i2c_read;
 	rmi4_data->i2c_write = synaptics_rmi4_i2c_write;
 	rmi4_data->irq_enable = synaptics_rmi4_irq_enable;
@@ -4122,15 +4165,9 @@ static int synaptics_rmi4_input_open(struct input_dev *dev)
 
 	if (rmi4_data->touch_stopped) {
 
-#if defined(CONFIG_TOUCHSCREEN_SYNAPTICS_PREVENT_HSYNC_LEAKAGE)
-		rmi4_data->board->hsync_onoff(false);
-#endif
 		rmi4_data->board->power(true);
 		rmi4_data->touch_stopped = false;
 
-#if defined(CONFIG_TOUCHSCREEN_SYNAPTICS_PREVENT_HSYNC_LEAKAGE)
-		rmi4_data->board->hsync_onoff(true);
-#endif
 		ret = synaptics_rmi4_reinit_device(rmi4_data);
 		if (ret < 0) {
 			dev_err(&rmi4_data->i2c_client->dev,
@@ -4232,15 +4269,10 @@ static void synaptics_rmi4_late_resume(struct early_suspend *h)
 	if (rmi4_data->touch_stopped) {
 		dev_info(&rmi4_data->i2c_client->dev, "%s\n", __func__);
 
-#if defined(CONFIG_TOUCHSCREEN_SYNAPTICS_PREVENT_HSYNC_LEAKAGE)
-		rmi4_data->board->hsync_onoff(false);
-#endif
 		rmi4_data->board->power(true);
 		rmi4_data->touch_stopped = false;
+		rmi4_data->current_page = MASK_8BIT;
 
-#if defined(CONFIG_TOUCHSCREEN_SYNAPTICS_PREVENT_HSYNC_LEAKAGE)
-		rmi4_data->board->hsync_onoff(true);
-#endif
 		retval = gpio_request(rmi4_data->board->gpio, "tsp_int");
 		if (retval != 0) {
 			dev_info(&rmi4_data->i2c_client->dev, "%s: tsp int request failed, ret=%d", __func__, retval);

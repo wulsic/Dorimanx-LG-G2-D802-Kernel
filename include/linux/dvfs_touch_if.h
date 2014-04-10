@@ -1,5 +1,5 @@
 /*
- * Author: Chad Froebel <chadfroebel@gmail.com>
+ * Author: Alucard_24 XDA
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -19,25 +19,30 @@
 #define CPU_MAX_FREQ	1890000
 
 #define DVFS_MIN_TOUCH_LIMIT	1134000
-#define DVFS_MIN_TOUCH_LIMIT_SECOND	810000
+#define DVFS_MIN_TOUCH_HIGH_LIMIT	1890000
+#define DVFS_MIN_TOUCH_LIMIT_SECOND		810000
+#define DVFS_MIN_TOUCH_HIGH_LIMIT_SECOND	1566000
 
 #define SYN_TOUCH_BOOSTER_OFF_TIME	300
 #define SYN_TOUCH_BOOSTER_CHG_TIME	200
+#define SYN_TOUCH_BOOSTER_HIGH_OFF_TIME	1000
+#define SYN_TOUCH_BOOSTER_HIGH_CHG_TIME	500
+
 #define MXTS_TOUCH_BOOSTER_OFF_TIME 100
 #define CYP_TOUCH_BOOSTER_OFF_TIME	300
 #define CYP_TOUCH_BOOSTER_CHG_TIME	200
-#define GPIO_KEY_BOOSTER_OFF_TIME	300
-#define GPIO_KEY_BOOSTER_CHG_TIME	200
 
 extern atomic_t dvfs_boost_mode;
-extern atomic_t dvfs_min_touch_limit;
-extern atomic_t dvfs_min_touch_limit_second;
-extern atomic_t syn_touch_booster_off_time;
-extern atomic_t syn_touch_booster_chg_time;
-extern atomic_t mxts_touch_booster_off_time;
-extern atomic_t cyp_touch_booster_off_time;
-extern atomic_t cyp_touch_booster_chg_time;
-extern atomic_t gpio_key_booster_off_time;
-extern atomic_t gpio_key_booster_chg_time;
+extern atomic_t dvfs_min_limit;
+extern atomic_t dvfs_min_high_limit;
+extern atomic_t dvfs_min_limit_second;
+extern atomic_t dvfs_min_high_limit_second;
+extern atomic_t syn_off_time;
+extern atomic_t syn_chg_time;
+extern atomic_t syn_high_off_time;
+extern atomic_t syn_high_chg_time;
+extern atomic_t mxts_off_time;
+extern atomic_t cyp_off_time;
+extern atomic_t cyp_chg_time;
 
 #endif

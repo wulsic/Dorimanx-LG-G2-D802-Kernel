@@ -278,7 +278,7 @@ static void cypress_change_dvfs_lock(struct work_struct *work)
 	int min_touch_limit_second = 0;
 
 	mutex_lock(&info->dvfs_lock);
-	min_touch_limit_second = atomic_read(&dvfs_min_touch_limit_second);
+	min_touch_limit_second = atomic_read(&dvfs_min_limit_second);
 	if (min_touch_limit_second < CPU_MIN_FREQ || min_touch_limit_second > CPU_MAX_FREQ) {
 		min_touch_limit_second = prev_min_touch_limit_second;
 	} else {
@@ -326,14 +326,14 @@ static void cypress_set_dvfs_lock(struct cypress_touchkey_info *info,
 	mutex_lock(&info->dvfs_lock);
 	if (on == 0) {
 		if (info->dvfs_lock_status) {
-			touch_booster_time = atomic_read(&cyp_touch_booster_off_time);
+			touch_booster_time = atomic_read(&cyp_off_time);
 			schedule_delayed_work(&info->work_dvfs_off,
 				msecs_to_jiffies(touch_booster_time));
 		}
 	} else if (on == 1) {
 		cancel_delayed_work(&info->work_dvfs_off);
 		if (!info->dvfs_lock_status) {
-			min_touch_limit = atomic_read(&dvfs_min_touch_limit);
+			min_touch_limit = atomic_read(&dvfs_min_limit);
 			if (min_touch_limit < CPU_MIN_FREQ || min_touch_limit > CPU_MAX_FREQ) {
 				min_touch_limit = prev_min_touch_limit;
 			} else {
@@ -346,7 +346,7 @@ static void cypress_set_dvfs_lock(struct cypress_touchkey_info *info,
 					"%s: cpu first lock failed(%d)\n",
 					__func__, ret);
 
-			touch_booster_time = atomic_read(&cyp_touch_booster_chg_time);
+			touch_booster_time = atomic_read(&cyp_chg_time);
 			schedule_delayed_work(&info->work_dvfs_chg,
 				msecs_to_jiffies(touch_booster_time));
 			info->dvfs_lock_status = true;

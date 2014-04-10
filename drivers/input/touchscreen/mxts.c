@@ -554,14 +554,14 @@ static void mxt_set_dvfs_lock(struct mxt_data *data, uint32_t on)
 	mutex_lock(&data->dvfs_lock);
 	if (on == 0) {
 		if (data->dvfs_lock_status) {
-			touch_booster_time = atomic_read(&mxts_touch_booster_off_time);
+			touch_booster_time = atomic_read(&mxts_off_time);
 			schedule_delayed_work(&data->work_dvfs_off,
 				msecs_to_jiffies(touch_booster_time));
 		}
 	} else if (on == 1) {
 		cancel_delayed_work(&data->work_dvfs_off);
 		if (!data->dvfs_lock_status) {
-			min_touch_limit = atomic_read(&dvfs_min_touch_limit);
+			min_touch_limit = atomic_read(&dvfs_min_limit);
 			if (min_touch_limit < CPU_MIN_FREQ || min_touch_limit > CPU_MAX_FREQ) {
 				min_touch_limit = prev_min_touch_limit;
 			} else {
