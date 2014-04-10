@@ -1,7 +1,7 @@
 /* linux/arch/arm/mach-msm/devices.h
  *
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -325,9 +325,6 @@ extern struct platform_device qfec_device;
 extern struct platform_device msm_kgsl_3d0;
 extern struct platform_device msm_kgsl_2d0;
 extern struct platform_device msm_kgsl_2d1;
-
-extern struct resource kgsl_3d0_resources_8960ab[];
-extern int kgsl_num_resources_8960ab;
 
 extern struct platform_device msm_mipi_dsi1_device;
 extern struct platform_device mipi_dsi_device;
