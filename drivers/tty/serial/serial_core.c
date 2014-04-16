@@ -1247,11 +1247,12 @@ static void uart_set_termios(struct tty_struct *tty,
 	}
 }
 
-/*                                                                                                     */
+/* AOSP HACK */
+#if 0
 #ifdef CONFIG_LGE_BLUESLEEP
 extern void bluesleep_forced_stop(void);
-#endif /*                      */
-/*                                                        */
+#endif
+#endif
 
 /*
  * In 2.4.5, calls to this will be serialized via the BKL in
@@ -1273,13 +1274,14 @@ static void uart_close(struct tty_struct *tty, struct file *filp)
 
 	pr_debug("uart_close(%d) called\n", uport->line);
 
-/*                                                                                                     */
+/* AOSP HACK */
+#if 0
 #ifdef CONFIG_LGE_BLUESLEEP
 	if (!strcmp(tty->name, "ttyHS99")) {
 		bluesleep_forced_stop();
 	}
-#endif /*                      */
-/*                                                        */
+#endif
+#endif
 
 	if (tty_port_close_start(port, tty, filp) == 0)
 		return;

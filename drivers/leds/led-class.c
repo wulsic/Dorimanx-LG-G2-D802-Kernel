@@ -449,6 +449,16 @@ static DEVICE_ATTR(onoff_patterns, 0644, confirm_onoff_pattern, make_onoff_patte
 
 int led_pattern_sysfs_register(void)
 {
+	/* AOSP HACK */
+	struct class *g2_rgb;
+	struct device *pattern_sysfs_dev;
+	g2_rgb = class_create(THIS_MODULE, "g2_rgb_led");
+	if (IS_ERR(g2_rgb)) {
+		printk("Failed to create class(g2_rgb_led)!\n");
+	}
+	pattern_sysfs_dev = device_create(g2_rgb, NULL, 0, NULL, "use_patterns");
+
+#if 0 /* STOCK ROM CONFIG */
 	struct class *lg_rgb;
 	struct device *pattern_sysfs_dev;
 	lg_rgb = class_create(THIS_MODULE, "lg_rgb_led");
@@ -456,6 +466,7 @@ int led_pattern_sysfs_register(void)
 		printk("Failed to create class(lg_rgb_led)!\n");
 	}
 	pattern_sysfs_dev = device_create(lg_rgb, NULL, 0, NULL, "use_patterns");
+#endif
 	if (IS_ERR(pattern_sysfs_dev))
 		return PTR_ERR(pattern_sysfs_dev);
 
