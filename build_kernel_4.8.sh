@@ -17,8 +17,6 @@ export ARCH=arm
 export CROSS_COMPILE=$PARENT_DIR/../arm-eabi-4.8/bin/arm-eabi-
 export KERNEL_CONFIG=alucard_defconfig;
 
-sh switchbranchon.sh tw-4.4;
-
 chmod -R 777 /tmp;
 
 time_start=$(date +%s.%N)
