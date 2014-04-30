@@ -726,11 +726,11 @@ static void synaptics_set_dvfs_lock(struct synaptics_rmi4_data *rmi4_data,
 		if (rmi4_data->dvfs_lock_status) {
 			if (rmi4_data->dvfs_boost_mode == DVFS_STAGE_NINTH) {
 				touch_booster_high_time = atomic_read(&syn_high_off_time);
-				schedule_delayed_work(&rmi4_data->work_dvfs_off,
+				queue_delayed_work(system_power_efficient_wq, &rmi4_data->work_dvfs_off,
 					msecs_to_jiffies(touch_booster_high_time));
 			} else {
 				touch_booster_time = atomic_read(&syn_off_time);
-				schedule_delayed_work(&rmi4_data->work_dvfs_off,
+				queue_delayed_work(system_power_efficient_wq, &rmi4_data->work_dvfs_off,
 					msecs_to_jiffies(touch_booster_time));
 			}
 		}
@@ -780,11 +780,11 @@ static void synaptics_set_dvfs_lock(struct synaptics_rmi4_data *rmi4_data,
 
 				if (rmi4_data->dvfs_boost_mode == DVFS_STAGE_NINTH) {
 					touch_booster_high_time = atomic_read(&syn_high_chg_time);
-					schedule_delayed_work(&rmi4_data->work_dvfs_chg,
+					queue_delayed_work(system_power_efficient_wq, &rmi4_data->work_dvfs_chg,
 						msecs_to_jiffies(touch_booster_high_time));
 				} else {
 					touch_booster_time = atomic_read(&syn_chg_time);
-					schedule_delayed_work(&rmi4_data->work_dvfs_chg,
+					queue_delayed_work(system_power_efficient_wq, &rmi4_data->work_dvfs_chg,
 						msecs_to_jiffies(touch_booster_time));
 				}
 				rmi4_data->dvfs_lock_status = true;
@@ -794,7 +794,7 @@ static void synaptics_set_dvfs_lock(struct synaptics_rmi4_data *rmi4_data,
 		if (rmi4_data->dvfs_lock_status) {
 			cancel_delayed_work(&rmi4_data->work_dvfs_off);
 			cancel_delayed_work(&rmi4_data->work_dvfs_chg);
-			schedule_work(&rmi4_data->work_dvfs_off.work);
+			queue_work(system_power_efficient_wq, &rmi4_data->work_dvfs_off.work);
 		}
 	}
 	rmi4_data->dvfs_old_stauts = on;
@@ -2625,7 +2625,7 @@ static void synaptics_work_rezero(struct work_struct *work)
 
 void synaptics_rmi4_f51_set_custom_rezero(struct synaptics_rmi4_data *rmi4_data)
 {
-	schedule_delayed_work(&rmi4_data->work_rezero,
+	queue_delayed_work(system_power_efficient_wq, &rmi4_data->work_rezero,
 				msecs_to_jiffies(300));
 }
 #endif
@@ -3791,7 +3791,7 @@ static void synaptics_init_power_on(struct work_struct *work)
 	if (!touch_display_status) {
 			dev_info(&rmi4_data->i2c_client->dev,
 					"%s: until lcd does not turn on.\n", __func__);
-			schedule_delayed_work(&rmi4_data->work_init_power_on,
+			queue_delayed_work(system_power_efficient_wq, &rmi4_data->work_init_power_on,
 					msecs_to_jiffies(1000));
 	} else {
 		synaptics_rmi4_late_resume(&rmi4_data->early_suspend);
@@ -3965,7 +3965,7 @@ static int __devinit synaptics_rmi4_probe(struct i2c_client *client,
 
 	INIT_DELAYED_WORK(&rmi4_data->work_init_power_on,
 					synaptics_init_power_on);
-	schedule_delayed_work(&rmi4_data->work_init_power_on,
+	queue_delayed_work(system_power_efficient_wq, &rmi4_data->work_init_power_on,
 					msecs_to_jiffies(6000));
 #endif
 

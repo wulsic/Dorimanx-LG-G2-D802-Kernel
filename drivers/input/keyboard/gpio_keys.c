@@ -353,7 +353,7 @@ static irqreturn_t flip_cover_detect(int irq, void *dev_id)
 	struct gpio_keys_drvdata *ddata = dev_id;
 
 	cancel_delayed_work_sync(&ddata->flip_cover_dwork);
-	schedule_delayed_work(&ddata->flip_cover_dwork, HZ / 20);
+	queue_delayed_work(system_power_efficient_wq, &ddata->flip_cover_dwork, HZ / 20);
 	return IRQ_HANDLED;
 }
 #endif
@@ -386,7 +386,7 @@ static void gpio_keys_gpio_timer(unsigned long _data)
 {
 	struct gpio_button_data *bdata = (struct gpio_button_data *)_data;
 
-	schedule_work(&bdata->work);
+	queue_work(system_power_efficient_wq, &bdata->work);
 }
 
 static irqreturn_t gpio_keys_gpio_isr(int irq, void *dev_id)
@@ -399,7 +399,7 @@ static irqreturn_t gpio_keys_gpio_isr(int irq, void *dev_id)
 		mod_timer(&bdata->timer,
 			jiffies + msecs_to_jiffies(bdata->timer_debounce));
 	else
-		schedule_work(&bdata->work);
+		queue_work(system_power_efficient_wq, &bdata->work);
 
 	return IRQ_HANDLED;
 }
@@ -587,7 +587,7 @@ static int gpio_keys_open(struct input_dev *input)
 		INIT_DELAYED_WORK(&ddata->flip_cover_dwork, flip_cover_work);
 
 		/* update the current status */
-		schedule_delayed_work(&ddata->flip_cover_dwork, HZ / 2);
+		queue_delayed_work(system_power_efficient_wq, &ddata->flip_cover_dwork, HZ / 2);
 
 hall_sensor_error:
 
