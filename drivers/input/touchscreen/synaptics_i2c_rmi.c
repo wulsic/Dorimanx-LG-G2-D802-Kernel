@@ -27,12 +27,20 @@
 #include <linux/earlysuspend.h>
 #endif
 #include "synaptics_i2c_rmi.h"
-#include <linux/dvfs_touch_if.h>
 #ifdef CONFIG_SEC_DVFS_BOOSTER
-static int prev_min_touch_limit = DVFS_MIN_TOUCH_LIMIT;
-static int prev_min_touch_high_limit = DVFS_MIN_TOUCH_HIGH_LIMIT;
-static int prev_min_touch_limit_second = DVFS_MIN_TOUCH_LIMIT_SECOND;
-static int prev_min_touch_high_limit_second = DVFS_MIN_TOUCH_HIGH_LIMIT_SECOND;
+#include <linux/module.h>
+#define CPU_MIN_FREQ	486000
+#define CPU_MAX_FREQ	1890000
+static unsigned int dvfs_boost_mode = 2;
+module_param(dvfs_boost_mode, uint, 0644);
+static unsigned int min_touch_limit = 1134000;
+module_param(min_touch_limit, uint, 0644);
+static unsigned int min_touch_limit_second = 810000;
+module_param(min_touch_limit_second, uint, 0644);
+static unsigned int booster_chg_time = 200;
+module_param(booster_chg_time, uint, 0644);
+static unsigned int booster_off_time = 300;
+module_param(booster_off_time, uint, 0644);
 #endif
 
 #define DRIVER_NAME "synaptics_rmi4_i2c"
@@ -616,14 +624,17 @@ static ssize_t synaptics_rmi4_full_pm_cycle_store(struct device *dev,
 #endif
 
 #ifdef TSP_BOOSTER
+#ifdef CONFIG_MSM_KGSL_KERNEL_API_ENABLE
+extern int kgsl_pwrctrl_min_pwrlevel_store_kernel(int level);
+extern int kgsl_pwrctrl_num_pwrlevels_show_kernel(void);
+#endif
 static void synaptics_change_dvfs_lock(struct work_struct *work)
 {
 	struct synaptics_rmi4_data *rmi4_data =
 		container_of(work,
 			struct synaptics_rmi4_data, work_dvfs_chg.work);
 	int retval = 0;
-	int min_touch_limit_second = 0;
-	int min_touch_high_limit_second = 0;
+	unsigned int limit_second;
 
 	mutex_lock(&rmi4_data->dvfs_lock);
 
@@ -633,35 +644,21 @@ static void synaptics_change_dvfs_lock(struct work_struct *work)
 				"%s: do fw update, do not change cpu frequency.\n",
 				__func__);
 		} else {
-			min_touch_limit_second = atomic_read(&dvfs_min_limit_second);
-			if (min_touch_limit_second < CPU_MIN_FREQ || min_touch_limit_second > CPU_MAX_FREQ) {
-				min_touch_limit_second = prev_min_touch_limit_second;
-			} else {
-				prev_min_touch_limit_second = min_touch_limit_second;
-			}
-			retval = set_freq_limit(DVFS_TOUCH_ID,
-					min_touch_limit_second);
-			rmi4_data->dvfs_freq = min_touch_limit_second;
-		}
-	} else if (rmi4_data->dvfs_boost_mode == DVFS_STAGE_NINTH) {
-		if (rmi4_data->stay_awake) {
-			dev_info(&rmi4_data->i2c_client->dev,
-				"%s: do fw update, do not change cpu frequency.\n",
-				__func__);
-		} else {
-			min_touch_high_limit_second = atomic_read(&dvfs_min_high_limit_second);
-			if (min_touch_high_limit_second < CPU_MIN_FREQ || min_touch_high_limit_second > CPU_MAX_FREQ) {
-				min_touch_high_limit_second = prev_min_touch_high_limit_second;
-			} else {
-				prev_min_touch_high_limit_second = min_touch_high_limit_second;
-			}
-			retval = set_freq_limit(DVFS_TOUCH_ID,
-				min_touch_high_limit_second);
-			rmi4_data->dvfs_freq = min_touch_high_limit_second;
+			limit_second = min_touch_limit_second;
+			if (limit_second < CPU_MIN_FREQ)
+				limit_second = CPU_MIN_FREQ;
+			else if (limit_second > CPU_MAX_FREQ)
+				limit_second = CPU_MAX_FREQ;
+
+			retval = set_freq_limit(DVFS_TOUCH_ID, limit_second);
+			rmi4_data->dvfs_freq = limit_second;
 		}
 	} else if (rmi4_data->dvfs_boost_mode == DVFS_STAGE_SINGLE) {
 		retval = set_freq_limit(DVFS_TOUCH_ID, -1);
 		rmi4_data->dvfs_freq = -1;
+#ifdef CONFIG_MSM_KGSL_KERNEL_API_ENABLE
+		kgsl_pwrctrl_min_pwrlevel_store_kernel(3);
+#endif
 	}
 
 	if (retval < 0)
@@ -688,6 +685,9 @@ static void synaptics_set_dvfs_off(struct work_struct *work)
 
 	retval = set_freq_limit(DVFS_TOUCH_ID, -1);
 	rmi4_data->dvfs_freq = -1;
+#ifdef CONFIG_MSM_KGSL_KERNEL_API_ENABLE
+	kgsl_pwrctrl_min_pwrlevel_store_kernel(3);
+#endif
 
 	if (retval < 0)
 		dev_err(&rmi4_data->i2c_client->dev,
@@ -703,16 +703,14 @@ static void synaptics_set_dvfs_lock(struct synaptics_rmi4_data *rmi4_data,
 					int on)
 {
 	int ret = 0;
-	int min_touch_limit = 0;
-	int min_touch_high_limit = 0;
-	int touch_booster_time = 0;
-	int touch_booster_high_time = 0;
-	int dvfs_boost_lvl = 0;
+	unsigned int limit;
+	unsigned int delay;
 
-	dvfs_boost_lvl = atomic_read(&dvfs_boost_mode);
-
-	if (rmi4_data->dvfs_boost_mode != dvfs_boost_lvl)
-		rmi4_data->dvfs_boost_mode = dvfs_boost_lvl;
+	if (rmi4_data->dvfs_boost_mode != dvfs_boost_mode) {
+		if (dvfs_boost_mode == 0 || dvfs_boost_mode == 1 
+				|| dvfs_boost_mode == 2)
+					rmi4_data->dvfs_boost_mode = dvfs_boost_mode;
+	}
 
 	if (rmi4_data->dvfs_boost_mode == DVFS_STAGE_NONE) {
 		dev_info(&rmi4_data->i2c_client->dev,
@@ -724,15 +722,9 @@ static void synaptics_set_dvfs_lock(struct synaptics_rmi4_data *rmi4_data,
 	mutex_lock(&rmi4_data->dvfs_lock);
 	if (on == 0) {
 		if (rmi4_data->dvfs_lock_status) {
-			if (rmi4_data->dvfs_boost_mode == DVFS_STAGE_NINTH) {
-				touch_booster_high_time = atomic_read(&syn_high_off_time);
-				queue_delayed_work(system_power_efficient_wq, &rmi4_data->work_dvfs_off,
-					msecs_to_jiffies(touch_booster_high_time));
-			} else {
-				touch_booster_time = atomic_read(&syn_off_time);
-				queue_delayed_work(system_power_efficient_wq, &rmi4_data->work_dvfs_off,
-					msecs_to_jiffies(touch_booster_time));
-			}
+			delay = booster_off_time;
+			queue_delayed_work(system_power_efficient_wq, &rmi4_data->work_dvfs_off,
+				msecs_to_jiffies(delay));
 		}
 	} else if (on > 0) {
 		cancel_delayed_work(&rmi4_data->work_dvfs_off);
@@ -740,35 +732,16 @@ static void synaptics_set_dvfs_lock(struct synaptics_rmi4_data *rmi4_data,
 		if (rmi4_data->dvfs_old_stauts != on) {
 			cancel_delayed_work(&rmi4_data->work_dvfs_chg);
 			if (1/*!rmi4_data->dvfs_lock_status*/) {
-				min_touch_limit = atomic_read(&dvfs_min_limit);
-				if (min_touch_limit < CPU_MIN_FREQ || min_touch_limit > CPU_MAX_FREQ) {
-					min_touch_limit = prev_min_touch_limit;
-				} else {
-					prev_min_touch_limit = min_touch_limit;
-				}
-				min_touch_high_limit = atomic_read(&dvfs_min_high_limit);
-				if (min_touch_high_limit < CPU_MIN_FREQ || min_touch_high_limit > CPU_MAX_FREQ) {
-					min_touch_high_limit = prev_min_touch_high_limit;
-				} else {
-					prev_min_touch_high_limit = min_touch_high_limit;
-				}
-				if ((rmi4_data->dvfs_freq != min_touch_limit)  &&
-					(rmi4_data->dvfs_boost_mode != DVFS_STAGE_NINTH)) {
-					ret = set_freq_limit(DVFS_TOUCH_ID,
-							min_touch_limit);
-					rmi4_data->dvfs_freq = min_touch_limit;
-#ifdef CONFIG_MSM_KGSL_KERNEL_API_ENABLE
-					kgsl_pwrctrl_min_pwrlevel_store_kernel(2);
-#endif
-					if (ret < 0)
-						dev_err(&rmi4_data->i2c_client->dev,
-							"%s: cpu first lock failed(%d)\n",
-							__func__, ret);
-				} else if ((rmi4_data->dvfs_freq != min_touch_high_limit) &&
-						(rmi4_data->dvfs_boost_mode == DVFS_STAGE_NINTH)) {
-					ret = set_freq_limit(DVFS_TOUCH_ID,
-								min_touch_high_limit);
-					rmi4_data->dvfs_freq = min_touch_high_limit;
+				limit = min_touch_limit;
+				if (limit < CPU_MIN_FREQ)
+					limit = CPU_MIN_FREQ;
+				else if (limit > CPU_MAX_FREQ)
+					limit = CPU_MAX_FREQ;
+
+				if (rmi4_data->dvfs_freq != limit) {
+					ret = set_freq_limit(DVFS_TOUCH_ID, limit);
+					rmi4_data->dvfs_freq = limit;
+
 #ifdef CONFIG_MSM_KGSL_KERNEL_API_ENABLE
 					kgsl_pwrctrl_min_pwrlevel_store_kernel(2);
 #endif
@@ -778,15 +751,10 @@ static void synaptics_set_dvfs_lock(struct synaptics_rmi4_data *rmi4_data,
 							__func__, ret);
 				}
 
-				if (rmi4_data->dvfs_boost_mode == DVFS_STAGE_NINTH) {
-					touch_booster_high_time = atomic_read(&syn_high_chg_time);
-					queue_delayed_work(system_power_efficient_wq, &rmi4_data->work_dvfs_chg,
-						msecs_to_jiffies(touch_booster_high_time));
-				} else {
-					touch_booster_time = atomic_read(&syn_chg_time);
-					queue_delayed_work(system_power_efficient_wq, &rmi4_data->work_dvfs_chg,
-						msecs_to_jiffies(touch_booster_time));
-				}
+				delay = booster_chg_time;
+				queue_delayed_work(system_power_efficient_wq, &rmi4_data->work_dvfs_chg,
+					msecs_to_jiffies(delay));
+
 				rmi4_data->dvfs_lock_status = true;
 			}
 		}
