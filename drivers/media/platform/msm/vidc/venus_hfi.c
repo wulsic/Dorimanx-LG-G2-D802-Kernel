@@ -975,6 +975,8 @@ static int __alloc_ocmem(void *dev, unsigned long size, int locked)
 			__func__, device, size);
 		return -EINVAL;
 	}
+	if (!device->res->ocmem_size)
+		return rc;
 
 	ocmem_buffer = device->resources.ocmem.buf;
 	if (!ocmem_buffer ||
