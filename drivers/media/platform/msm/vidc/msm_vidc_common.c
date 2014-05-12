@@ -1548,21 +1548,12 @@ void msm_comm_scale_clocks_and_bus(struct msm_vidc_inst *inst)
 		dprintk(VIDC_WARN,
 				"Failed to scale DDR bus. Performance might be impacted\n");
 	}
-	if (core->resources.has_ocmem) {
+	if (core->resources.ocmem_size) {
 		if (msm_comm_scale_bus(core, inst->session_type,
 					OCMEM_MEM))
 			dprintk(VIDC_WARN,
 					"Failed to scale OCMEM bus. Performance might be impacted\n");
 	}
-}
-
-static inline unsigned long get_ocmem_requirement(u32 height, u32 width)
-{
-	int num_mbs = 0;
-	num_mbs = GET_NUM_MBS(height, width);
-	/*TODO: This should be changes once the numbers are
-	 * available from firmware*/
-	return 512 * 1024;
 }
 
 static int msm_comm_unset_ocmem(struct msm_vidc_core *core)
@@ -1890,7 +1881,6 @@ static int msm_vidc_load_resources(int flipped_state,
 	struct msm_vidc_inst *inst)
 {
 	int rc = 0;
-	u32 ocmem_sz = 0;
 	struct hfi_device *hdev;
 	int num_mbs_per_sec = 0;
 	int height, width;
@@ -1924,20 +1914,18 @@ static int msm_vidc_load_resources(int flipped_state,
 						inst, inst->state);
 		goto exit;
 	}
-	if (inst->core->resources.has_ocmem) {
+	if (inst->core->resources.ocmem_size) {
 		height = max(inst->prop.height[CAPTURE_PORT],
 			inst->prop.height[OUTPUT_PORT]);
 		width = max(inst->prop.width[CAPTURE_PORT],
 			inst->prop.width[OUTPUT_PORT]);
-		ocmem_sz = get_ocmem_requirement(
-			height, width);
 		rc = msm_comm_scale_bus(inst->core, inst->session_type,
 					OCMEM_MEM);
 		if (!rc) {
 			mutex_lock(&inst->core->lock);
 			rc = call_hfi_op(hdev, alloc_ocmem,
 					hdev->hfi_device_data,
-					ocmem_sz);
+					inst->core->resources.ocmem_size);
 			mutex_unlock(&inst->core->lock);
 			if (rc) {
 				dprintk(VIDC_WARN,
@@ -3696,7 +3684,7 @@ void msm_vidc_fw_unload_handler(struct work_struct *work)
 	if (list_empty(&core->instances) &&
 		core->state != VIDC_CORE_UNINIT) {
 		if (core->state > VIDC_CORE_INIT) {
-			if (core->resources.has_ocmem) {
+			if (core->resources.ocmem_size) {
 				if (core->state != VIDC_CORE_INVALID)
 					msm_comm_unset_ocmem(core);
 				call_hfi_op(hdev, free_ocmem,
@@ -3717,7 +3705,7 @@ void msm_vidc_fw_unload_handler(struct work_struct *work)
 
 		call_hfi_op(hdev, unload_fw, hdev->hfi_device_data);
 		dprintk(VIDC_DBG, "Firmware unloaded\n");
-		if (core->resources.has_ocmem)
+		if (core->resources.ocmem_size)
 			msm_comm_unvote_buses(core, DDR_MEM|OCMEM_MEM);
 		else
 			msm_comm_unvote_buses(core, DDR_MEM);
