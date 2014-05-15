@@ -1032,12 +1032,4 @@ config TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE
 	  To compile this driver as a module, choose M here: the
 	  module will be called synaptics_dsx_fw_update.
 
-config TOUCH_BOOSTER
-	bool "Touch Booster Interface"
-	depends on !SEC_DVFS_BOOSTER
-	default y
-	help
-	  A simple sysfs interface to manage
-          touch booster manually.
-
 endif
