@@ -176,7 +176,6 @@ int send_instruction(struct ssp_data *data, u8 uInst,
 	char chTxbuf[uLength + 4];
 	char chRxbuf = 0;
 	int iRet = 0, iRetries = DEFAULT_RETRIES;
-	unsigned int cpu;
 
 	if (data->fw_dl_state == FW_DL_STATE_DOWNLOADING) {
 		pr_err("[SSP] %s - Skip Inst! DL state = %d\n",
