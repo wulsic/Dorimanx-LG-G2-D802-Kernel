@@ -1369,7 +1369,7 @@ static void hdmi_edid_extract_vendor_id(const uint8 *in_buf,
 
 static uint32 hdmi_edid_extract_ieee_reg_id(const uint8 *in_buf)
 {
-	uint8 len;
+	uint8 len = 0;
 	const uint8 *vsd = hdmi_edid_find_block(in_buf, DBC_START_OFFSET, 3,
 			&len);
 
@@ -1388,7 +1388,7 @@ static uint32 hdmi_edid_extract_ieee_reg_id(const uint8 *in_buf)
 
 static void hdmi_edid_extract_3d_present(const uint8 *in_buf)
 {
-	uint8 len, offset;
+	uint8 len = 0, offset;
 	const uint8 *vsd = hdmi_edid_find_block(in_buf, DBC_START_OFFSET, 3,
 			&len);
 
@@ -1409,7 +1409,7 @@ static void hdmi_edid_extract_3d_present(const uint8 *in_buf)
 
 static void hdmi_edid_extract_latency_fields(const uint8 *in_buf)
 {
-	uint8 len;
+	uint8 len = 0;
 	const uint8 *vsd = hdmi_edid_find_block(in_buf, DBC_START_OFFSET, 3,
 			&len);
 
@@ -1428,7 +1428,7 @@ static void hdmi_edid_extract_latency_fields(const uint8 *in_buf)
 
 static void hdmi_edid_extract_speaker_allocation_data(const uint8 *in_buf)
 {
-	uint8 len;
+	uint8 len = 0;
 	uint16 speaker_allocation = 0;
 	const uint8 *sad = hdmi_edid_find_block(in_buf, DBC_START_OFFSET, 4,
 			&len);
@@ -1452,7 +1452,7 @@ static void hdmi_edid_extract_speaker_allocation_data(const uint8 *in_buf)
 
 static void hdmi_edid_extract_audio_data_blocks(const uint8 *in_buf)
 {
-	uint8 len;
+	uint8 len = 0;
 	uint16 audio_ch = 0;
 	const uint8 *sad = hdmi_edid_find_block(in_buf, DBC_START_OFFSET, 1,
 			&len);
@@ -1781,7 +1781,7 @@ static int hdmi_edid_get_display_vsd_3d_mode(const uint8 *data_buf,
 	struct hdmi_disp_mode_list_type *disp_mode_list,
 	uint32 num_og_cea_blocks)
 {
-	uint8 len, offset, present_multi_3d, hdmi_vic_len;
+	uint8 len = 0, offset, present_multi_3d, hdmi_vic_len;
 	uint16 structure_all, structure_mask;
 	int hdmi_3d_len;
 	const uint8 *vsd = num_og_cea_blocks ?
@@ -2149,7 +2149,7 @@ static void hdmi_edid_get_display_mode(const uint8 *data_buf,
 #if !defined (CONFIG_SAMSUNG_MHL_8240)
 static int hdmi_common_read_edid_block(int block, uint8 *edid_buf)
 {
-	uint32 ndx, check_sum, print_len;
+	uint32 ndx, check_sum, print_len = 0;
 #ifdef DEBUG
 	const u8 *b = edid_buf;
 #endif

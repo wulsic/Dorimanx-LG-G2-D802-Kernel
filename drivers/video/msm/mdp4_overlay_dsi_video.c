@@ -270,7 +270,7 @@ int mdp4_dsi_video_pipe_commit(int cndx, int wait)
 	for (i = 0; i < OVERLAY_PIPE_MAX; i++, pipe++) {
 		if (pipe->pipe_used) {
 
-		
+
 		/* free previous iommu to freelist
 		* which will be freed at next
 		* pipe_commit
@@ -317,7 +317,7 @@ int mdp4_dsi_video_pipe_commit(int cndx, int wait)
 	return cnt;
 }
 static void mdp4_video_vsync_irq_ctrl(int cndx, int enable)
-{       
+{
 	struct vsycn_ctrl *vctrl;
 
 	vctrl = &vsync_ctrl_db[cndx];
@@ -374,7 +374,7 @@ void mdp4_dsi_video_wait4vsync(int cndx)
 
 	if (atomic_read(&vctrl->suspend) > 0)
 		return;
-	
+
 	mdp4_video_vsync_irq_ctrl(cndx, 1);
 
 	ret = wait_event_interruptible_timeout(vctrl->wait_queue, 1,
@@ -384,7 +384,7 @@ void mdp4_dsi_video_wait4vsync(int cndx)
 		pr_err("%s timeout ret=%d", __func__, ret);
 
 	mdp4_video_vsync_irq_ctrl(cndx, 0);
-	
+
 	mdp4_stat.wait4vsync0++;
 
 }
@@ -807,9 +807,6 @@ int mdp4_dsi_video_off(struct platform_device *pdev)
 
 	mdp4_dsi_video_wait4vsync(cndx);
 
-	if (pipe == NULL)
-		return -EINVAL;
-		
 	if (pipe->ov_blt_addr) {
 		spin_lock_irqsave(&vctrl->spin_lock, flags);
 		if (vctrl->ov_koff != vctrl->ov_done)

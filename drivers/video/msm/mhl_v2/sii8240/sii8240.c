@@ -358,7 +358,7 @@ static int tmds_control(struct sii8240_data *sii8240, bool tmds_on)
 {
 	int ret = 0;
 #ifdef SFEATURE_HDCP_SUPPORT
-	u8 value, value2;
+	u8 value = 0, value2;
 #endif
 	struct i2c_client *tpi = sii8240->pdata->tpi_client;
 	struct i2c_client *hdmi = sii8240->pdata->hdmi_client;
@@ -3661,7 +3661,7 @@ static int sii8240_check_scdt_reg(struct sii8240_data *sii8240)
 static int sii8240_audio_video_intr_control(struct sii8240_data *sii8240)
 {
 	int ret = 0;
-	u8 upstatus, ceainfo;
+	u8 upstatus = 0, ceainfo = 0;
 	u8 checksum = 0;
 #ifdef SFEATURE_HDCP_SUPPORT
 	u8 value;

@@ -3030,25 +3030,25 @@ static int sii8240_msc_irq_handler(struct sii8240_data *sii8240, u8 intr)
 		if (sii8240->cbus_ready) {
 			pr_info("sii8240: device capability cbus_ready\n");
 			if (sii8240_queue_cbus_cmd_locked(sii8240, READ_DEVCAP,
-					MHL_DEVCAP_MHL_VERSION, 0) < 0)
+						MHL_DEVCAP_MHL_VERSION, 0) < 0)
 				pr_info("sii8240: MHL_VERSION read fail\n");
 			if (sii8240_queue_cbus_cmd_locked(sii8240, READ_DEVCAP,
-					MHL_DEVCAP_ADOPTER_ID_H, 0) < 0)
+						MHL_DEVCAP_ADOPTER_ID_H, 0) < 0)
 				pr_info("sii8240: MHL_ADOPTER_ID_H read fail\n");
 			if (sii8240_queue_cbus_cmd_locked(sii8240, READ_DEVCAP,
-					MHL_DEVCAP_ADOPTER_ID_L, 0) < 0)
+						MHL_DEVCAP_ADOPTER_ID_L, 0) < 0)
 				pr_info("sii8240: MHL_ADOPTER_ID_L read fail\n");
 			if (sii8240_queue_cbus_cmd_locked(sii8240, READ_DEVCAP,
-					MHL_DEVCAP_RESERVED, 0) < 0)
+						MHL_DEVCAP_RESERVED, 0) < 0)
 				pr_info("sii8240: MHL_RESERVED read fail\n");
 			if (sii8240_queue_cbus_cmd_locked(sii8240, READ_DEVCAP,
-					MHL_DEVCAP_DEV_CAT, 0) < 0)
+						MHL_DEVCAP_DEV_CAT, 0) < 0)
 				pr_info("sii8240: DEV_CAT read fail\n");
 			if (sii8240_queue_cbus_cmd_locked(sii8240, READ_DEVCAP,
-					MHL_DEVCAP_FEATURE_FLAG, 0) < 0)
+						MHL_DEVCAP_FEATURE_FLAG, 0) < 0)
 				pr_info("sii8240: FEATURE_FLAG read fail\n");
 			if (sii8240_queue_cbus_cmd_locked(sii8240, READ_DEVCAP,
-					MHL_DEVCAP_VID_LINK_MODE, 0) < 0)
+						MHL_DEVCAP_VID_LINK_MODE, 0) < 0)
 				pr_info("sii8240: VID_LINK_MODE read fail\n");
 		}
 

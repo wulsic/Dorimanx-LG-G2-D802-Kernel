@@ -1658,9 +1658,9 @@ static int max77693_muic_handle_attach(struct max77693_muic_info *info,
 		}
 		break;
 	case CABLE_TYPE_AUDIODOCK_MUIC:
-		if ((adc != ADC_AUDIODOCK) || (!vbvolt)) {                  	
-        		dev_warn(info->dev, "%s: assume audiodock detach\n",
-        			__func__);
+		if ((adc != ADC_AUDIODOCK) || (!vbvolt)) {
+			dev_warn(info->dev, "%s: assume audiodock detach\n",
+				__func__);
 			dev_info(info->dev, "%s: AUDIODOCK\n", __func__);
 			info->cable_type = CABLE_TYPE_NONE_MUIC;
 			if (mdata->audiodock_cb)
@@ -1670,7 +1670,7 @@ static int max77693_muic_handle_attach(struct max77693_muic_info *info,
 				mdata->usb_cb(USB_POWERED_HOST_DETACHED);
 			ret = max77693_muic_set_charging_type(info, false);
 			max77693_muic_set_charging_type(info, false);
-	       	}
+		}
 		break;
 	case CABLE_TYPE_TA_MUIC:
 		if ((adc != ADC_OPEN) || (!vbvolt)) {

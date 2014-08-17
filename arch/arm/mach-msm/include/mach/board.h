@@ -490,6 +490,7 @@ struct mipi_dsi_platform_data {
 	int (*dsi_client_reset)(void);
 	int (*get_lane_config)(void);
 	char (*splash_is_enabled)(void);
+	void (*lcd_rst_down) (void);
 	int target_type;
 #if defined(CONFIG_SUPPORT_SECOND_POWER)
 	int (*panel_power_save)(int on);
@@ -519,6 +520,7 @@ struct mipi_dsi_panel_platform_data {
 	char dlane_swap;
 	void (*dsi_pwm_cfg)(void);
 	char enable_wled_bl_ctrl;
+	void (*gpio_set_backlight)(int bl_level);
 };
 
 struct lvds_panel_platform_data {
@@ -537,9 +539,6 @@ struct msm_fb_platform_data {
 	int (*allow_set_offset)(void);
 	char prim_panel_name[PANEL_NAME_MAX_LEN];
 	char ext_panel_name[PANEL_NAME_MAX_LEN];
-#ifdef CONFIG_UPDATE_LCDC_LUT
-	int (*update_lcdc_lut)(void);
-#endif
 };
 
 struct msm_hdmi_platform_data {

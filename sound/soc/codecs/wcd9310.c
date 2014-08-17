@@ -4365,11 +4365,11 @@ static int tabla_set_channel_map(struct snd_soc_dai *dai,
 		tabla->dai[dai->id - 1].ch_act = 0;
 		for (i = 0; i < tx_num; i++)
 			tabla->dai[dai->id - 1].ch_num[i]  = tx_slot[i];
-			
+
 		printk("=[WCD]=%s: APQ<-", __func__);
 		for(i = 0; i < tx_num ; i++)
 			printk("[%d]",tabla->dai[dai->id - 1].ch_num[i]);
-		printk(" WCD channel mapping\n");			
+		printk(" WCD channel mapping\n");
 	}
 	return 0;
 }
@@ -8428,7 +8428,7 @@ static const struct tabla_reg_mask_val tabla_1_1_reg_defaults[] = {
 	TABLA_REG_VAL(TABLA_A_CDC_CLSG_FREQ_THRESH_B2_CTL, 0x05),
 	TABLA_REG_VAL(TABLA_A_CDC_CLSG_FREQ_THRESH_B3_CTL, 0x06),
 	TABLA_REG_VAL(TABLA_A_CDC_CLSG_FREQ_THRESH_B4_CTL, 0x0C),
-	TABLA_REG_VAL(TABLA_A_CDC_CLSG_GAIN_THRESH_CTL, 0x0D)	
+	TABLA_REG_VAL(TABLA_A_CDC_CLSG_GAIN_THRESH_CTL, 0x0D)
 };
 
 static const struct tabla_reg_mask_val tabla_2_0_reg_defaults[] = {

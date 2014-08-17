@@ -94,5 +94,4 @@ extern struct platform_device msm_dsps_device;
 #if defined(CONFIG_MSM_RPM_STATS_LOG)
 extern struct platform_device msm_rpm_stat_device;
 #endif
-
 #endif

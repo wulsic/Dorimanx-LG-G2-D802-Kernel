@@ -161,18 +161,8 @@ static int msm_fb_detect_panel(const char *name)
 	return -ENODEV;
 }
 
-#ifdef CONFIG_UPDATE_LCDC_LUT
-int update_preset_lcdc_lut(void)
-{
-	return 0;
-}
-#endif
-
 static struct msm_fb_platform_data msm_fb_pdata = {
 	.detect_client = msm_fb_detect_panel,
-#ifdef CONFIG_UPDATE_LCDC_LUT
-	.update_lcdc_lut = update_preset_lcdc_lut,
-#endif
 };
 
 static struct platform_device msm_fb_device = {
@@ -606,7 +596,7 @@ static int mipi_dsi_power_tft_request(void)
 	if(system_rev < 10)
 		gpio_direction_output(gpio33, 0);
 	else
-		gpio_direction_output(LCD_22V_EN, 0);	
+		gpio_direction_output(LCD_22V_EN, 0);
 #else
 	gpio_direction_output(LCD_22V_EN, 0);
 #endif
