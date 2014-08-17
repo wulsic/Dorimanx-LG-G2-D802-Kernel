@@ -2,7 +2,7 @@
  * DHD Bus Module for SDIO
  *
  * Copyright (C) 1999-2013, Broadcom Corporation
- * 
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
@@ -174,7 +174,7 @@ extern int dhd_os_wlfc_unblock(dhd_pub_t *pub);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25))
 DEFINE_MUTEX(_dhd_sdio_mutex_lock_);
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)) */
-#endif 
+#endif
 
 #ifdef DHD_DEBUG
 /* Device console log buffer state */
@@ -1710,7 +1710,7 @@ dhd_tcpack_suppress(dhd_pub_t *dhdp, void *pkt)
 #if defined(DHD_DEBUG)
 		uint32 tcp_seq_num = tcp_header[4] << 24 | tcp_header[5] << 16 |
 			tcp_header[6] << 8 | tcp_header[7];
-#endif 
+#endif
 		uint32 tcp_ack_num = tcp_header[8] << 24 | tcp_header[9] << 16 |
 			tcp_header[10] << 8 | tcp_header[11];
 		uint16 ip_tcp_ttllen =  (ip_header[3] & 0xff) + (ip_header[2] << 8);
@@ -6677,7 +6677,7 @@ dhdsdio_isr(void *arg)
 	bus->dpc_sched = TRUE;
 	dhd_sched_dpc(bus->dhd);
 
-#endif 
+#endif
 
 }
 
@@ -7282,7 +7282,7 @@ dhdsdio_probe(uint16 venid, uint16 devid, uint16 bus_no, uint16 slot,
 	}
 	mutex_lock(&_dhd_sdio_mutex_lock_);
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)) */
-#endif 
+#endif
 
 	/* Init global variables at run-time, not as part of the declaration.
 	 * This is required to support init/de-init of the driver. Initialization
@@ -7475,7 +7475,7 @@ dhdsdio_probe(uint16 venid, uint16 devid, uint16 bus_no, uint16 slot,
 	mutex_unlock(&_dhd_sdio_mutex_lock_);
 	DHD_ERROR(("%s : the lock is released.\n", __FUNCTION__));
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)) */
-#endif 
+#endif
 
 	return bus;
 
@@ -7488,7 +7488,7 @@ forcereturn:
 	mutex_unlock(&_dhd_sdio_mutex_lock_);
 	DHD_ERROR(("%s : the lock is released.\n", __FUNCTION__));
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)) */
-#endif 
+#endif
 
 	return NULL;
 }
@@ -7990,7 +7990,7 @@ dhdsdio_disconnect(void *ptr)
 	}
 	mutex_lock(&_dhd_sdio_mutex_lock_);
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)) */
-#endif 
+#endif
 
 
 	if (bus) {

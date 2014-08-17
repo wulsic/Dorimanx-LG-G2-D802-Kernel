@@ -2,7 +2,7 @@
  * Linux cfg80211 driver - Android related functions
  *
  * Copyright (C) 1999-2013, Broadcom Corporation
- * 
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
@@ -359,7 +359,7 @@ static int lock_cookie_wifi = 'W' | 'i'<<8 | 'F'<<16 | 'i'<<24;	/* cookie is "Wi
 extern bool ap_fw_loaded;
 #if defined(CUSTOMER_HW4)
 extern char iface_name[IFNAMSIZ];
-#endif 
+#endif
 
 /**
  * Local (static) functions and variables
@@ -2930,7 +2930,7 @@ int wl_android_init(void)
 		memset(iface_name, 0, IFNAMSIZ);
 		bcm_strncpy_s(iface_name, IFNAMSIZ, "wlan", IFNAMSIZ);
 	}
-#endif 
+#endif
 
 #ifdef WL_GENL
 	wl_genl_init();
