@@ -58,6 +58,7 @@ static int msm_hdmi_sample_rate = MSM_HDMI_SAMPLE_RATE_48KHZ;
 #define HDCP_DDC_CTRL_1		0x0124
 #define HDMI_DDC_CTRL		0x020C
 
+
 #define HPD_DISCONNECT_POLARITY	0
 #define HPD_CONNECT_POLARITY	1
 #define HPD_EVENT_OFFLINE 0

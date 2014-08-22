@@ -209,6 +209,7 @@ int mdp4_dsi_video_pipe_commit(int cndx, int wait)
 	}
 	mutex_unlock(&vctrl->update_lock);
 
+
 	spin_lock_irqsave(&vctrl->spin_lock, flags);
 	if (vctrl->ov_koff != vctrl->ov_done) {
 		spin_unlock_irqrestore(&vctrl->spin_lock, flags);
@@ -1030,6 +1031,7 @@ void mdp4_primary_vsync_dsi_video(void)
 {
 	int cndx;
 	struct vsycn_ctrl *vctrl;
+
 
 	cndx = 0;
 	vctrl = &vsync_ctrl_db[cndx];

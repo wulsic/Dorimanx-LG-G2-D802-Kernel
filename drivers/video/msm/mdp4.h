@@ -999,7 +999,6 @@ int mdp4_wfd_pipe_commit(struct msm_fb_data_type *mfd, int cndx, int wait);
 #if defined(CONFIG_FB_MSM_CAMERA_CSC)
 #define CSC_UPDATA_SIZE 10
 #endif
-
 #ifdef CONFIG_FB_MSM_OVERLAY
 int mdp4_unmap_sec_resource(struct msm_fb_data_type *mfd);
 #else

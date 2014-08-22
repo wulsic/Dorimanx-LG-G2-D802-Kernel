@@ -1143,6 +1143,7 @@ void mdp4_overlay_vg_setup(struct mdp4_overlay_pipe *pipe)
 		}
 	}
 
+
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
 	mdp4_stat.pipe[pipe->pipe_num]++;
@@ -2347,6 +2348,7 @@ void mdp4_mixer_blend_setup(int mixer)
 		else
 			mdp4_set_blend_by_op(s_pipe, d_pipe, alpha_drop, blend);
 
+
 		if (s_pipe->transp != MDP_TRANSP_NOP) {
 			if (s_pipe->is_fg) {
 				transp_color_key(s_pipe->src_format,
@@ -2796,7 +2798,6 @@ static int mdp4_overlay_req2pipe(struct mdp_overlay *req, int mixer,
 	pipe->blend_op = req->blend_op;
 
 	pipe->transp = req->transp_mask;
-
 
 	if ((pipe->flags & MDP_SECURE_OVERLAY_SESSION) &&
 		(!(req->flags & MDP_SECURE_OVERLAY_SESSION))) {

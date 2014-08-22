@@ -5637,9 +5637,6 @@ static struct clk_lookup msm_clocks_8064[] = {
 	CLK_LOOKUP("krait1_mclk",	krait1_m_clk, ""),
 	CLK_LOOKUP("krait2_mclk",	krait2_m_clk, ""),
 	CLK_LOOKUP("krait3_mclk",	krait3_m_clk, ""),
-#ifdef CONFIG_SND_SOC_ES325
-	CLK_LOOKUP("osr_clk",	codec_i2s_spkr_osr_clk.c, "es325_mclk_dev"),
-#endif
 	CLK_LOOKUP("rot_iommu_clk",	rot_axi_clk.c,	"msm_rotator.0"),
 	CLK_LOOKUP("mdp_iommu_clk", mdp_axi_clk.c,	"msm_rotator.0"),
 	CLK_LOOKUP("vcodec_iommu0_clk", vcodec_axi_a_clk.c, "msm_rotator.0"),
@@ -5650,6 +5647,9 @@ static struct clk_lookup msm_clocks_8064[] = {
 	CLK_LOOKUP("vcodec_iommu0_clk", vcodec_axi_a_clk.c, "mdp.0"),
 	CLK_LOOKUP("vcodec_iommu1_clk", vcodec_axi_b_clk.c, "mdp.0"),
 	CLK_LOOKUP("smmu_iface_clk", smmu_p_clk.c,	"mdp.0"),
+#ifdef CONFIG_SND_SOC_ES325
+	CLK_LOOKUP("osr_clk",	codec_i2s_spkr_osr_clk.c, "es325_mclk_dev"),
+#endif
 };
 
 static struct clk_lookup msm_clocks_8960_common[] __initdata = {

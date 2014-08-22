@@ -2,7 +2,7 @@
  *
  * MSM MDP Interface (used by framebuffer core)
  *
- * Copyright (c) 2007-2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2007-2014, The Linux Foundation. All rights reserved.
  * Copyright (C) 2007 Google Incorporated
  *
  * This software is licensed under the terms of the GNU General Public
@@ -2394,7 +2394,9 @@ static int mdp_off(struct platform_device *pdev)
 
 	mdp_clk_ctrl(0);
 #ifdef CONFIG_MSM_BUS_SCALING
+
 	mdp_bus_scale_update_request(0, 0, 0, 0);
+
 #endif
 	pr_debug("%s:-\n", __func__);
 	return ret;
@@ -2555,6 +2557,7 @@ void mdp_hw_version(void)
        }
 #endif
 
+
 /*
  *    Entry 0 hold 0 request
  *    Entry 1 and 2 do ping pong request
@@ -2627,7 +2630,6 @@ int mdp_bus_scale_update_request(u64 ab_p0, u64 ib_p0, u64 ab_p1, u64 ib_p1)
 	bus_index = (bus_index > 2) ? 1 : bus_index;
 
 	mdp_bus_usecases[bus_index].vectors[0].ab = min(ab_p0, mdp_max_bw);
-
    ib_p0 = max(ib_p0, ab_p0);
    mdp_bus_usecases[bus_index].vectors[0].ib = min(ib_p0, mdp_max_bw);
 
@@ -3223,6 +3225,8 @@ static int mdp_probe(struct platform_device *pdev)
 			pdata->off = mdp4_overlay_writeback_off;
 			mfd->dma_fnc = mdp4_writeback_overlay;
 			mfd->dma = &dma_wb_data;
+			mutex_init(&mfd->writeback_mutex);
+			mutex_init(&mfd->unregister_mutex);
 			mdp4_display_intf_sel(EXTERNAL_INTF_SEL, DTV_INTF);
 		}
 		break;

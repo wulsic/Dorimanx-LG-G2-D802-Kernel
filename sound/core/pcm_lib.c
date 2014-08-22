@@ -1815,11 +1815,11 @@ static int wait_for_avail(struct snd_pcm_substream *substream,
 #ifndef TEMP_REDUCDED
 		/* sometimes read function is stuck.
 		   because of abnormal open/close and read function time
-		   So, we modified wait time temporarily */		
+		   So, we modified wait time temporarily */
 		wait_time = msecs_to_jiffies(wait_time * 100);
 #else
 		wait_time = msecs_to_jiffies(wait_time * 1000);
-#endif		
+#endif
 	}
 
 	for (;;) {
