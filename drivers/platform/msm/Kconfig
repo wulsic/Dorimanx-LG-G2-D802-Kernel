@@ -80,9 +80,8 @@ config MSM_AVTIMER
 	tristate "Avtimer Driver"
 	depends on ARCH_MSM8960
 	help
-		This driver gets the Q6 out of power collapsed state and
-		exposes ioctl control to read avtimer tick.
-
+	  This driver gets the Q6 out of power collapsed state and
+          exposes ioctl control to read avtimer tick.
 config PFT
 	bool "Per-File-Tagger driver"
 	default n

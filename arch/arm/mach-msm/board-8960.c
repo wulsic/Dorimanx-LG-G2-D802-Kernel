@@ -649,7 +649,7 @@ static void __init reserve_ion_memory(void)
 
 			if (fixed_position != NOT_FIXED)
 				fixed_size += heap->size;
-			else
+			else if (!use_cma)
 				reserve_mem_for_ion(MEMTYPE_EBI1, heap->size);
 
 			if (fixed_position == FIXED_LOW) {
@@ -767,29 +767,6 @@ static void __init reserve_ion_memory(void)
 		}
 	}
 #endif
-}
-
-static void ion_adjust_secure_allocation(void)
-{
-	int i;
-
-	for (i = 0; i < msm8960_ion_pdata.nr; i++) {
-		struct ion_platform_heap *heap =
-			&(msm8960_ion_pdata.heaps[i]);
-
-
-		if (heap->extra_data) {
-			switch ((int) heap->type) {
-			case ION_HEAP_TYPE_CP:
-				if (cpu_is_msm8960()) {
-					((struct ion_cp_heap_pdata *)
-					heap->extra_data)->no_nonsecure_alloc =
-						0;
-				}
-
-			}
-		}
-	}
 }
 
 static void __init reserve_mdp_memory(void)
@@ -1348,11 +1325,14 @@ static struct platform_device qcedev_device = {
 static struct mdm_platform_data sglte_platform_data = {
 	.mdm_version = "4.0",
 	.ramdump_delay_ms = 1000,
+	/* delay between two PS_HOLDs */
+	.ps_hold_delay_ms = 500,
 	.soft_reset_inverted = 1,
 	.peripheral_platform_device = NULL,
 	.ramdump_timeout_ms = 600000,
 	.no_powerdown_after_ramdumps = 1,
 	.image_upgrade_supported = 1,
+	.subsys_name = "external_modem"
 };
 
 #define MSM_TSIF0_PHYS			(0x18200000)
@@ -1393,26 +1373,49 @@ static const struct msm_gpio tsif_gpios[] = {
 
 static struct resource tspp_resources[] = {
 	[0] = {
+		.name = "TSIF_TSPP_IRQ",
 		.flags = IORESOURCE_IRQ,
 		.start = TSIF_TSPP_IRQ,
-		.end   = TSIF1_IRQ,
+		.end   = TSIF_TSPP_IRQ,
 	},
 	[1] = {
+		.name = "TSIF0_IRQ",
+		.flags = IORESOURCE_IRQ,
+		.start = TSIF1_IRQ,
+		.end   = TSIF1_IRQ,
+	},
+	[2] = {
+		.name = "TSIF1_IRQ",
+		.flags = IORESOURCE_IRQ,
+		.start = TSIF2_IRQ,
+		.end   = TSIF2_IRQ,
+	},
+	[3] = {
+		.name = "TSIF_BAM_IRQ",
+		.flags = IORESOURCE_IRQ,
+		.start = TSIF_BAM_IRQ,
+		.end   = TSIF_BAM_IRQ,
+	},
+	[4] = {
+		.name = "MSM_TSIF0_PHYS",
 		.flags = IORESOURCE_MEM,
 		.start = MSM_TSIF0_PHYS,
 		.end   = MSM_TSIF0_PHYS + MSM_TSIF_SIZE - 1,
 	},
-	[2] = {
+	[5] = {
+		.name = "MSM_TSIF1_PHYS",
 		.flags = IORESOURCE_MEM,
 		.start = MSM_TSIF1_PHYS,
 		.end   = MSM_TSIF1_PHYS + MSM_TSIF_SIZE - 1,
 	},
-	[3] = {
+	[6] = {
+		.name = "MSM_TSPP_PHYS",
 		.flags = IORESOURCE_MEM,
 		.start = MSM_TSPP_PHYS,
 		.end   = MSM_TSPP_PHYS + MSM_TSPP_SIZE - 1,
 	},
-	[4] = {
+	[7] = {
+		.name = "MSM_TSPP_BAM_PHYS",
 		.flags = IORESOURCE_MEM,
 		.start = MSM_TSPP_BAM_PHYS,
 		.end   = MSM_TSPP_BAM_PHYS + MSM_TSPP_BAM_SIZE - 1,
@@ -1668,6 +1671,13 @@ static uint8_t spm_retention_cmd_sequence[] __initdata = {
 			0x0B, 0x00, 0x0f,
 };
 
+static uint8_t spm_retention_with_krait_v3_cmd_sequence[] __initdata = {
+	0x42, 0x1B, 0x00,
+	0x05, 0x03, 0x0D, 0x0B,
+	0x00, 0x42, 0x1B,
+	0x0f,
+};
+
 static uint8_t spm_power_collapse_without_rpm[] __initdata = {
 			0x00, 0x24, 0x54, 0x10,
 			0x09, 0x03, 0x01,
@@ -1680,6 +1690,22 @@ static uint8_t spm_power_collapse_with_rpm[] __initdata = {
 			0x09, 0x07, 0x01, 0x0B,
 			0x10, 0x54, 0x30, 0x0C,
 			0x24, 0x30, 0x0f,
+};
+
+/* 8960AB has a different command to assert apc_pdn */
+static uint8_t spm_power_collapse_without_rpm_krait_v3[] __initdata = {
+	0x00, 0x30, 0x24, 0x30,
+	0x84, 0x10, 0x09, 0x03,
+	0x01, 0x10, 0x84, 0x30,
+	0x0C, 0x24, 0x30, 0x0f,
+};
+
+static uint8_t spm_power_collapse_with_rpm_krait_v3[] __initdata = {
+	0x00, 0x30, 0x24, 0x30,
+	0x84, 0x10, 0x09, 0x07,
+	0x01, 0x0B, 0x10, 0x84,
+	0x30, 0x0C, 0x24, 0x30,
+	0x0f,
 };
 
 static struct msm_spm_seq_entry msm_spm_boot_cpu_seq_list[] __initdata = {
@@ -1713,12 +1739,20 @@ static struct msm_spm_seq_entry msm_spm_nonboot_cpu_seq_list[] __initdata = {
 		.notify_rpm = false,
 		.cmd = spm_wfi_cmd_sequence,
 	},
+
 	[1] = {
+		.mode = MSM_SPM_MODE_POWER_RETENTION,
+		.notify_rpm = false,
+		.cmd = spm_retention_cmd_sequence,
+	},
+
+	[2] = {
 		.mode = MSM_SPM_MODE_POWER_COLLAPSE,
 		.notify_rpm = false,
 		.cmd = spm_power_collapse_without_rpm,
 	},
-	[2] = {
+
+	[3] = {
 		.mode = MSM_SPM_MODE_POWER_COLLAPSE,
 		.notify_rpm = true,
 		.cmd = spm_power_collapse_with_rpm,
@@ -1749,9 +1783,9 @@ static struct msm_spm_platform_data msm_spm_data[] __initdata = {
 		.reg_init_values[MSM_SPM_REG_SAW2_AVS_HYSTERESIS] = 0x00020000,
 #endif
 		.reg_init_values[MSM_SPM_REG_SAW2_SPM_CTL] = 0x01,
-		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DLY] = 0x02020204,
-		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_0] = 0x0060009C,
-		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_1] = 0x0000001C,
+		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DLY] = 0x03020004,
+		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_0] = 0x0084009C,
+		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_1] = 0x00A4001C,
 		.vctl_timeout_us = 50,
 		.num_modes = ARRAY_SIZE(msm_spm_nonboot_cpu_seq_list),
 		.modes = msm_spm_nonboot_cpu_seq_list,
@@ -2508,6 +2542,13 @@ static struct platform_device fish_battery_device = {
 };
 #endif
 
+#ifdef CONFIG_BATTERY_BCL
+static struct platform_device battery_bcl_device = {
+	.name = "battery_current_limit",
+	.id = -1,
+	};
+#endif
+
 static struct platform_device msm8960_device_ext_5v_vreg __devinitdata = {
 	.name	= GPIO_REGULATOR_DEV_NAME,
 	.id	= PM8921_MPP_PM_TO_SYS(7),
@@ -2564,6 +2605,7 @@ static struct msm_serial_hs_platform_data msm_uart_dm8_pdata = {
 	.uart_rx_gpio		= 35,
 	.uart_cts_gpio		= 36,
 	.uart_rfr_gpio		= 37,
+	.uartdm_rx_buf_size	= 1024,
 };
 #else
 static struct msm_serial_hs_platform_data msm_uart_dm8_pdata;
@@ -2767,6 +2809,9 @@ static struct platform_device *common_devices[] __initdata = {
 #ifdef CONFIG_MSM_FAKE_BATTERY
 	&fish_battery_device,
 #endif
+#ifdef CONFIG_BATTERY_BCL
+	&battery_bcl_device,
+#endif
 	&msm8960_fmem_device,
 #ifdef CONFIG_ANDROID_PMEM
 #ifndef CONFIG_MSM_MULTIMEDIA_USE_ION
@@ -2810,7 +2855,6 @@ static struct platform_device *common_devices[] __initdata = {
 	&msm8960_cache_dump_device,
 	&msm8960_iommu_domain_device,
 	&msm_tsens_device,
-	&msm8960_pc_cntr,
 	&msm8960_cpu_slp_status,
 };
 
@@ -3033,6 +3077,12 @@ struct i2c_registry {
 	int                    len;
 };
 
+/* AVTimer */
+static struct platform_device msm_dev_avtimer_device = {
+	.name = "dev_avtimer",
+	.dev = { .platform_data = &dev_avtimer_pdata },
+};
+
 /* Sensors DSPS platform data */
 #ifdef CONFIG_MSM_DSPS
 #define DSPS_PIL_GENERIC_NAME		"dsps"
@@ -3239,6 +3289,45 @@ static void __init msm8960_tsens_init(void)
 	msm_tsens_early_init(&msm_tsens_pdata);
 }
 
+static void __init msm8960ab_update_krait_spm(void)
+ {
+ 	int i;
+ 
+
+	/* Update the SPM sequences for SPC and PC */
+	for (i = 0; i < ARRAY_SIZE(msm_spm_data); i++) {
+		int j;
+		struct msm_spm_platform_data *pdata = &msm_spm_data[i];
+		for (j = 0; j < pdata->num_modes; j++) {
+			if (pdata->modes[j].cmd ==
+					spm_power_collapse_without_rpm)
+				pdata->modes[j].cmd =
+				spm_power_collapse_without_rpm_krait_v3;
+			else if (pdata->modes[j].cmd ==
+					spm_power_collapse_with_rpm)
+				pdata->modes[j].cmd =
+				spm_power_collapse_with_rpm_krait_v3;
+		}
+	}
+}
+
+static void __init msm8960ab_update_retention_spm(void)
+{
+	int i;
+
+	/* Update the SPM sequences for krait retention on all cores */
+	for (i = 0; i < ARRAY_SIZE(msm_spm_data); i++) {
+		int j;
+		struct msm_spm_platform_data *pdata = &msm_spm_data[i];
+		for (j = 0; j < pdata->num_modes; j++) {
+			if (pdata->modes[j].cmd ==
+					spm_retention_cmd_sequence)
+				pdata->modes[j].cmd =
+				spm_retention_with_krait_v3_cmd_sequence;
+		}
+	}
+}
+
 static void __init msm8960_cdp_init(void)
 {
 	if (meminfo_init(SYS_MEMORY, SZ_256M) < 0)
@@ -3293,6 +3382,16 @@ static void __init msm8960_cdp_init(void)
 		msm_isa1200_board_info[0].platform_data = &isa1200_1_pdata;
 	msm8960_i2c_init();
 	msm8960_gfx_init();
+ 	if (cpu_is_msm8960ab())
+		msm8960ab_update_krait_spm();
+	if (cpu_is_krait_v3()) {
+		struct msm_pm_init_data_type *pdata =
+			msm8960_pm_8x60.dev.platform_data;
+		pdata->retention_calls_tz = false;
+		msm8960ab_update_retention_spm();
+	}
+	platform_device_register(&msm8960_pm_8x60);
+
 	msm_spm_init(msm_spm_data, ARRAY_SIZE(msm_spm_data));
 	msm_spm_l2_init(msm_spm_l2_data);
 	msm8960_init_buses();
@@ -3358,8 +3457,10 @@ static void __init msm8960_cdp_init(void)
 		mdm_sglte_device.dev.platform_data = &sglte_platform_data;
 		platform_device_register(&mdm_sglte_device);
 	}
-	msm_pm_set_tz_retention_flag(1);
-	ion_adjust_secure_allocation();
+	if (machine_is_msm8960_mtp() || machine_is_msm8960_fluid() ||
+		machine_is_msm8960_cdp()) {
+		platform_device_register(&msm_dev_avtimer_device);
+	}
 }
 
 MACHINE_START(MSM8960_CDP, "QCT MSM8960 CDP")

@@ -42,7 +42,6 @@
 #include <linux/notifier.h>
 #include <linux/rculist.h>
 #include <linux/irq_work.h>
-#include <linux/coresight-stm.h>
 
 #include <asm/uaccess.h>
 
@@ -978,8 +977,6 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 			}
 		}
 	}
-
-	stm_log(OST_ENTITY_PRINTK, printk_buf, printed_len);
 
 	/*
 	 * Copy the output into log_buf. If the caller didn't provide

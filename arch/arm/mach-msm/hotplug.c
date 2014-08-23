@@ -12,8 +12,8 @@
 #include <linux/smp.h>
 #include <linux/cpu.h>
 #include <linux/ratelimit.h>
-#include <linux/notifier.h>
 
+#include <asm/cacheflush.h>
 #include <asm/smp_plat.h>
 #include <asm/vfp.h>
 
@@ -25,19 +25,15 @@
 
 extern volatile int pen_release;
 
-struct msm_hotplug_device {
-	struct completion cpu_killed;
-	unsigned int warm_boot;
-};
-
-
 static cpumask_t cpu_dying_mask;
 
-static DEFINE_PER_CPU_SHARED_ALIGNED(struct msm_hotplug_device,
-			msm_hotplug_devices);
+static DEFINE_PER_CPU(unsigned int, warm_boot_flag);
 
 static inline void cpu_enter_lowpower(void)
 {
+	/* Just flush the cache. Changing the coherency is not yet
+	 * available on msm. */
+	flush_cache_all();
 }
 
 static inline void cpu_leave_lowpower(void)
@@ -93,7 +89,6 @@ void platform_cpu_die(unsigned int cpu)
 			__func__, smp_processor_id(), cpu);
 		BUG();
 	}
-	complete(&__get_cpu_var(msm_hotplug_devices).cpu_killed);
 	/*
 	 * we're ready for shutdown now, so do it
 	 */
@@ -182,11 +177,10 @@ static struct notifier_block hotplug_cpu_check_notifier = {
 int msm_platform_secondary_init(unsigned int cpu)
 {
 	int ret;
-	struct msm_hotplug_device *dev = &__get_cpu_var(msm_hotplug_devices);
+	unsigned int *warm_boot = &__get_cpu_var(warm_boot_flag);
 
-	if (!dev->warm_boot) {
-		dev->warm_boot = 1;
-		init_completion(&dev->cpu_killed);
+	if (!(*warm_boot)) {
+		*warm_boot = 1;
 		return 0;
 	}
 	msm_jtag_restore_state();
@@ -201,9 +195,6 @@ int msm_platform_secondary_init(unsigned int cpu)
 static int __init init_hotplug(void)
 {
 	int rc;
-	struct msm_hotplug_device *dev = &__get_cpu_var(msm_hotplug_devices);
-
-	init_completion(&dev->cpu_killed);
 
 	rc = register_hotcpu_notifier(&hotplug_rtb_notifier);
 	if (rc)

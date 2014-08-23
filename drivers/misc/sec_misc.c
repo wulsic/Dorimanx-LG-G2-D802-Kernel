@@ -33,7 +33,6 @@
 #include <mach/gpio.h>
 #include <linux/sec_param.h>
 #include <linux/sec_class.h>
-
 #define MOVINAND_CHECKSUM
 #define RORY_CONTROL
 

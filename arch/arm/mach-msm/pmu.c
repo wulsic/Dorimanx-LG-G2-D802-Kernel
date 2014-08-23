@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,6 +11,7 @@
  */
 
 #include <linux/platform_device.h>
+#include <linux/irq.h>
 #include <asm/pmu.h>
 #include <mach/irqs.h>
 #include <mach/socinfo.h>
@@ -18,6 +19,19 @@
 #if defined(CONFIG_PERF_EVENTS)
 #if defined(CONFIG_ARCH_MSM_KRAITMP) || defined(CONFIG_ARCH_MSM_SCORPIONMP)
 static DEFINE_PER_CPU(u32, pmu_irq_cookie);
+
+static __ref int armpmu_cpu_up(int cpu)
+{
+	int ret = 0;
+
+	if (!cpumask_test_cpu(cpu, cpu_online_mask)) {
+		ret = cpu_up(cpu);
+		if (ret)
+			pr_err("Failed to bring up CPU: %d, ret: %d\n",
+			       cpu, ret);
+	}
+	return ret;
+}
 
 static int
 multicore_request_irq(int irq, irq_handler_t *handle_irq)
@@ -42,10 +56,12 @@ static void
 multicore_free_irq(int irq)
 {
 	int cpu;
+	struct irq_desc *desc = irq_to_desc(irq);
 
 	if (irq >= 0) {
-		for_each_cpu(cpu, cpu_online_mask) {
-			smp_call_function_single(cpu,
+		for_each_cpu(cpu, desc->percpu_enabled) {
+			if (!armpmu_cpu_up(cpu))
+				smp_call_function_single(cpu,
 					disable_irq_callback, &irq, 1);
 		}
 		free_percpu_irq(irq, &pmu_irq_cookie);
@@ -91,6 +107,7 @@ static struct platform_device cpu_pmu_device = {
 	.resource	= cpu_pmu_resource,
 	.num_resources	= ARRAY_SIZE(cpu_pmu_resource),
 };
+
 
 static struct platform_device *pmu_devices[] = {
 	&cpu_pmu_device,

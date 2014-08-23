@@ -293,7 +293,6 @@ struct msm_slim_ctrl {
 	bool			use_rx_msgqs;
 	int			pipe_b;
 	struct completion	reconf;
-	bool			reconf_busy;
 	bool			chan_active;
 	enum msm_ctrl_state	state;
 	int			nsats;
@@ -549,6 +548,17 @@ static irqreturn_t msm_slim_interrupt(int irq, void *d)
 			 */
 			mb();
 			complete(&dev->rx_msgq_notify);
+		} else if (mt == SLIM_MSG_MT_CORE &&
+			mc == SLIM_MSG_MC_REPORT_ABSENT) {
+			writel_relaxed(MGR_INT_RX_MSG_RCVD, dev->base +
+						MGR_INT_CLR);
+			/*
+			 * Guarantee that CLR bit write goes through
+			 * before signalling completion
+			 */
+			mb();
+			complete(&dev->rx_msgq_notify);
+
 		} else if (mc == SLIM_MSG_MC_REPLY_INFORMATION ||
 				mc == SLIM_MSG_MC_REPLY_VALUE) {
 			msm_slim_rx_enqueue(dev, rx_buf, len);
@@ -821,10 +831,6 @@ static int msm_xfer_msg(struct slim_controller *ctrl, struct slim_msg_txn *txn)
 	}
 	if (txn->mt == SLIM_MSG_MT_CORE &&
 		mc == SLIM_MSG_MC_BEGIN_RECONFIGURATION) {
-		if (dev->reconf_busy) {
-			wait_for_completion(&dev->reconf);
-			dev->reconf_busy = false;
-		}
 		/* This "get" votes for data channels */
 		if (dev->ctrl.sched.usedslots != 0 &&
 			!dev->chan_active) {
@@ -900,9 +906,6 @@ static int msm_xfer_msg(struct slim_controller *ctrl, struct slim_msg_txn *txn)
 		}
 		*(puc) = *(puc) + dev->pipe_b;
 	}
-	if (txn->mt == SLIM_MSG_MT_CORE &&
-		mc == SLIM_MSG_MC_BEGIN_RECONFIGURATION)
-		dev->reconf_busy = true;
 	dev->wr_comp = &done;
 	msm_send_msg_buf(ctrl, pbuf, txn->rl);
 	timeout = wait_for_completion_timeout(&done, HZ);
@@ -913,7 +916,6 @@ static int msm_xfer_msg(struct slim_controller *ctrl, struct slim_msg_txn *txn)
 					SLIM_MSG_CLK_PAUSE_SEQ_FLG)) &&
 				timeout) {
 			timeout = wait_for_completion_timeout(&dev->reconf, HZ);
-			dev->reconf_busy = false;
 			if (timeout) {
 				clk_disable_unprepare(dev->rclk);
 				disable_irq(dev->irq);
@@ -922,13 +924,18 @@ static int msm_xfer_msg(struct slim_controller *ctrl, struct slim_msg_txn *txn)
 		if ((txn->mc == (SLIM_MSG_MC_RECONFIGURE_NOW |
 					SLIM_MSG_CLK_PAUSE_SEQ_FLG)) &&
 				!timeout) {
-			dev->reconf_busy = false;
 			dev_err(dev->dev, "clock pause failed");
 			mutex_unlock(&dev->tx_lock);
 			return -ETIMEDOUT;
 		}
 		if (txn->mt == SLIM_MSG_MT_CORE &&
 			txn->mc == SLIM_MSG_MC_RECONFIGURE_NOW) {
+			/* Wait for reconf_done interrupt to avoid
+			 * HW synchronization issues.
+			 */
+			if (timeout)
+				timeout =
+				wait_for_completion_timeout(&dev->reconf, HZ);
 			if (dev->ctrl.sched.usedslots == 0 &&
 					dev->chan_active) {
 				dev->chan_active = false;
@@ -941,10 +948,10 @@ static int msm_xfer_msg(struct slim_controller *ctrl, struct slim_msg_txn *txn)
 				txn->mc, txn->mt);
 		dev->wr_comp = NULL;
 	}
-	//if (mc == SLIM_USR_MC_GENERIC_ACK) {
-	//	u32 mgrstat = readl_relaxed(dev->base + MGR_STATUS);
-	//	pr_info("-slimdebug-generic ack:0x %x, mgrstat:0x%x", pbuf[0], mgrstat);
-	//} /* slimbus debug patch */
+	/* if (mc == SLIM_USR_MC_GENERIC_ACK) {
+		u32 mgrstat = readl_relaxed(dev->base + MGR_STATUS);
+		pr_info("-slimdebug-generic ack:0x %x, mgrstat:0x%x", pbuf[0], mgrstat);
+	} */ /* slimbus debug patch */
 	mutex_unlock(&dev->tx_lock);
 	if (msgv >= 0)
 		msm_slim_put_ctrl(dev);
@@ -1114,8 +1121,8 @@ static int msm_sat_define_ch(struct msm_slim_sat *sat, u8 *buf, u8 len, u8 mc)
 		/* part of grp. activating/removing 1 will take care of rest */
 		ret = slim_control_ch(&sat->satcl, sat->satch[i].chanh, oper,
 					false);
-		//pr_info("-slimdebug-SAT oper:%d grp start:%d, ret:%d", oper,
-		//		sat->satch[i].chan, ret); /* slimbus debug patch */
+		/* pr_info("-slimdebug-SAT oper:%d grp start:%d, ret:%d", oper,
+				sat->satch[i].chan, ret); */ /* slimbus debug patch */
 		if (!ret) {
 			for (i = 5; i < len; i++) {
 				int j;
@@ -1203,7 +1210,7 @@ static int msm_sat_define_ch(struct msm_slim_sat *sat, u8 *buf, u8 len, u8 mc)
 			ret = slim_control_ch(&sat->satcl,
 					chh[0],
 					SLIM_CH_ACTIVATE, false);
-			//pr_info("-slimdebug-SAT activate grp start: ret:%d", ret); /* slimbus debug patch */
+			/* pr_info("-slimdebug-SAT activate grp start: ret:%d", ret); */ /* slimbus debug patch */
 		}
 	}
 	return ret;
@@ -1234,7 +1241,7 @@ static void msm_slim_rxwq(struct msm_slim_ctrl *dev)
 				e_addr[1] = 0x01;
 
 				ret = slim_assign_laddr(&dev->ctrl, e_addr, 6,
-							&laddr);
+							&laddr, false);
 
 				pr_info("wrapper %s assign laddr %2x ret=%d\n",
 					__func__, e_addr[1], ret);
@@ -1242,14 +1249,15 @@ static void msm_slim_rxwq(struct msm_slim_ctrl *dev)
 				e_addr[1] = 0x00;
 
 				ret = slim_assign_laddr(&dev->ctrl, e_addr,
-							6, &laddr);
+							6, &laddr, false);
 
 				pr_info("wrapper %s assign laddr %2x ret=%d\n",
 					__func__, e_addr[1], ret);
 
 			} else
 #endif
-			ret = slim_assign_laddr(&dev->ctrl, e_addr, 6, &laddr);
+			ret = slim_assign_laddr(&dev->ctrl, e_addr, 6, &laddr,
+						false);
 
         	pr_info("wrapper slim_rxwq eaddr %2x:%2x:%2x:%2x:%2x:%2x [laddr=%d]\n",
 			e_addr[0], e_addr[1], e_addr[2],
@@ -1314,9 +1322,9 @@ static void slim_sat_rxprocess(struct work_struct *work)
 	struct msm_slim_ctrl *dev = sat->dev;
 	u8 buf[40];
 
-#ifdef CONFIG_DEBUG_FS	
+#ifdef CONFIG_DEBUG_FS
 	int index;
-#endif	
+#endif
 
 	while ((msm_sat_dequeue(sat, buf)) != -ENODATA) {
 		struct slim_msg_txn txn;
@@ -1357,8 +1365,8 @@ static void slim_sat_rxprocess(struct work_struct *work)
 			 * when this is detected
 			 */
 			if (sat->sent_capability) {
-				//pr_info("-slimdebug-Received report present from SAT:0x%x",
-				//		sat->satcl.laddr); /* slimbus debug patch */
+				/*pr_info("-slimdebug-Received report present from SAT:0x%x",
+						sat->satcl.laddr); */ /* slimbus debug patch */
 				for (i = 0; i < sat->nsatch; i++) {
 					if (sat->satch[i].reconf) {
 						pr_err("SSR, sat:%d, rm ch:%d",
@@ -1468,7 +1476,7 @@ send_capability:
 		case SLIM_USR_MC_RECONFIG_NOW:
 			tid = buf[3];
 			gen_ack = true;
-			//pr_info("-slimdebug-SAT:LA:%x reconf req", sat->satcl.laddr); /* slimbus debug patch */
+			/* pr_info("-slimdebug-SAT:LA:%x reconf req", sat->satcl.laddr); */ /* slimbus debug patch */
 			ret = slim_reconfigure_now(&sat->satcl);
 			for (i = 0; i < sat->nsatch; i++) {
 				struct msm_sat_chan *sch = &sat->satch[i];
@@ -1516,8 +1524,8 @@ send_capability:
 			txn.len = 2;
 			txn.wbuf = wbuf;
 			gen_ack = true;
-			//pr_info("-slimdebug-SAT connect MC:0x%x,LA:0x%x", txn.mc,
-			//		sat->satcl.laddr); /* slimbus debug patch */
+			/* pr_info("-slimdebug-SAT connect MC:0x%x,LA:0x%x", txn.mc,
+					sat->satcl.laddr); */ /* slimbus debug patch */
 			ret = msm_xfer_msg(&dev->ctrl, &txn);
 
 #ifdef CONFIG_DEBUG_FS
@@ -1541,7 +1549,7 @@ send_capability:
 			txn.mt = SLIM_MSG_MT_CORE;
 			txn.wbuf = wbuf;
 			gen_ack = true;
-			//pr_info("-slimdebug-SAT disconnect LA:0x%x", sat->satcl.laddr); /* slimbus debug patch */
+			/* pr_info("-slimdebug-SAT disconnect LA:0x%x", sat->satcl.laddr); */ /* slimbus debug patch */
 			ret = msm_xfer_msg(&dev->ctrl, &txn);
 
 #ifdef CONFIG_DEBUG_FS
@@ -1552,9 +1560,11 @@ send_capability:
 			slim_debug[index][buf[4] &0x1f].direction = 0;
 			slim_debug[index][buf[4] &0x1f].port = 0;
 			slim_debug[index][buf[4] &0x1f].ch_num = 0;
-			break;
 #endif
-
+			break;
+		case SLIM_MSG_MC_REPORT_ABSENT:
+			dev_info(dev->dev, "Received Report Absent Message\n");
+			break;
 		default:
 			break;
 		}
@@ -1568,7 +1578,7 @@ send_capability:
 		if (!ret)
 			wbuf[1] = MSM_SAT_SUCCSS;
 		else {
-			//pr_info("-slimdebug-sat cmd:0x%x no ack:%d", mc, ret); /* slimbus debug patch */
+			/* pr_info("-slimdebug-sat cmd:0x%x no ack:%d", mc, ret); */ /* slimbus debug patch */
 			wbuf[1] = 0;
 		}
 		txn.mc = SLIM_USR_MC_GENERIC_ACK;
@@ -1579,9 +1589,9 @@ send_capability:
 		txn.mt = SLIM_MSG_MT_SRC_REFERRED_USER;
 		ret = msm_xfer_msg(&dev->ctrl, &txn);
 		if (ret) {
-			//pr_info("-slimdebug-sending ACK failed:%d", ret);
-			//pr_info("-slimdebug-clk gear:%d, subfrm mode:0x%x",
-			//	dev->ctrl.clkgear, dev->ctrl.sched.subfrmcode);
+			/* pr_info("-slimdebug-sending ACK failed:%d", ret);
+			pr_info("-slimdebug-clk gear:%d, subfrm mode:0x%x",
+				dev->ctrl.clkgear, dev->ctrl.sched.subfrmcode); */
 			ret = 0;
 		} /* slimbus debug patch */
 		if (satv >= 0)
@@ -1776,7 +1786,8 @@ static int msm_slim_rx_msgq_thread(void *data)
 				index = 0;
 #endif
 			}
-		} else if ((index * 4) >= msg_len) {
+		}
+		if ((index * 4) >= msg_len) {
 			index = 0;
 			if (sat) {
 				msm_sat_enqueue(sat, buffer, msg_len);
@@ -1925,7 +1936,7 @@ static int __devinit
 msm_slim_sps_init(struct msm_slim_ctrl *dev, struct resource *bam_mem)
 {
 	int i, ret;
-	u32 bam_handle;
+	u32 bam_handle = 0;
 	struct sps_bam_props bam_props = {0};
 
 	static struct sps_bam_sec_config_props sec_props = {

@@ -432,7 +432,6 @@ __acquires(&port->port_lock)
 		spin_unlock(&port->port_lock);
 		status = usb_ep_queue(in, req, GFP_ATOMIC);
 		spin_lock(&port->port_lock);
-
 		/*
 		 * If port_usb is NULL, gserial disconnect is called
 		 * while the spinlock is dropped and all requests are
@@ -498,7 +497,6 @@ __acquires(&port->port_lock)
 		spin_unlock(&port->port_lock);
 		status = usb_ep_queue(out, req, GFP_ATOMIC);
 		spin_lock(&port->port_lock);
-
 		/*
 		 * If port_usb is NULL, gserial disconnect is called
 		 * while the spinlock is dropped and all requests are
@@ -1070,9 +1068,9 @@ static void gs_unthrottle(struct tty_struct *tty)
 	unsigned long		flags;
 
 	/*
-	* tty's driver data is set to NULL during port close.  Nothing
-	* to do here.
-	*/
+	 * tty's driver data is set to NULL during port close.  Nothing
+	 * to do here.
+	 */
 	if (!port)
 		return;
 

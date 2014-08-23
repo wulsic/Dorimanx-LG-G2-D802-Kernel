@@ -60,7 +60,7 @@ struct eth_dev {
 
 	spinlock_t		req_lock;	/* guard {rx,tx}_reqs */
 	struct list_head	tx_reqs, rx_reqs;
-	atomic_t		tx_qlen;
+	unsigned		tx_qlen;
 /* Minimum number of TX USB request queued to UDC */
 #define TX_REQ_THRESHOLD	5
 	int			no_tx_req_used;
@@ -585,7 +585,7 @@ static inline int is_promisc(u16 cdc_filter)
 	return cdc_filter & USB_CDC_PACKET_TYPE_PROMISCUOUS;
 }
 
-static void alloc_tx_buffer(struct eth_dev *dev)
+static int alloc_tx_buffer(struct eth_dev *dev)
 {
 	struct list_head	*act;
 	struct usb_request	*req;
@@ -602,7 +602,19 @@ static void alloc_tx_buffer(struct eth_dev *dev)
 		if (!req->buf)
 			req->buf = kmalloc(dev->tx_req_bufsize,
 						GFP_ATOMIC);
+			if (!req->buf)
+				goto free_buf;
 	}
+	return 0;
+
+free_buf:
+	/* tx_req_bufsize = 0 retries mem alloc on next eth_start_xmit */
+	dev->tx_req_bufsize = 0;
+	list_for_each(act, &dev->tx_reqs) {
+		req = container_of(act, struct usb_request, list);
+		kfree(req->buf);
+	}
+	return -ENOMEM;
 }
 
 static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
@@ -615,7 +627,7 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 	unsigned long		flags;
 	struct usb_ep		*in;
 	u16			cdc_filter;
-	bool                    multi_pkt_xfer = false;
+	bool			multi_pkt_xfer = false;
 
 	spin_lock_irqsave(&dev->lock, flags);
 	if (dev->port_usb) {
@@ -634,8 +646,11 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 	}
 
 	/* Allocate memory for tx_reqs to support multi packet transfer */
-	if (multi_pkt_xfer && !dev->tx_req_bufsize)
-		alloc_tx_buffer(dev);
+	if (multi_pkt_xfer && !dev->tx_req_bufsize) {
+		retval = alloc_tx_buffer(dev);
+		if (retval < 0)
+			return -ENOMEM;
+	}
 
 	/* apply outgoing CDC or RNDIS filters */
 	if (!is_promisc(cdc_filter)) {
@@ -755,10 +770,10 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 	/* throttle highspeed IRQ rate back slightly */
 	if (gadget_is_dualspeed(dev->gadget) &&
 			 (dev->gadget->speed == USB_SPEED_HIGH)) {
-		atomic_inc(&dev->tx_qlen);
-		if (atomic_read(&dev->tx_qlen) == (qmult/2)) {
+		dev->tx_qlen++;
+		if (dev->tx_qlen == (qmult/2)) {
 			req->no_interrupt = 0;
-			atomic_set(&dev->tx_qlen, 0);
+			dev->tx_qlen = 0;
 		} else {
 			req->no_interrupt = 1;
 		}
@@ -802,7 +817,7 @@ static void eth_start(struct eth_dev *dev, gfp_t gfp_flags)
 	rx_fill(dev, gfp_flags);
 
 	/* and open the tx floodgates */
-	atomic_set(&dev->tx_qlen, 0);
+	dev->tx_qlen = 0;
 	netif_wake_queue(dev->net);
 }
 
@@ -861,6 +876,14 @@ static int eth_stop(struct net_device *net)
 		usb_ep_disable(link->in_ep);
 		usb_ep_disable(link->out_ep);
 		if (netif_carrier_ok(net)) {
+			if (config_ep_by_speed(dev->gadget, &link->func,
+					       link->in_ep) ||
+			    config_ep_by_speed(dev->gadget, &link->func,
+					       link->out_ep)) {
+				link->in_ep->desc = NULL;
+				link->out_ep->desc = NULL;
+				return -EINVAL;
+			}
 			DBG(dev, "host still using in/out endpoints\n");
 			link->in_ep->desc = in;
 			link->out_ep->desc = out;

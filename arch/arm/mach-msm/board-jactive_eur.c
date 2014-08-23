@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -81,6 +81,7 @@
 #include <linux/msm_tsens.h>
 #include <mach/msm_xo.h>
 #include <mach/msm_rtb.h>
+#include <mach/msm_serial_hs.h>
 #include <sound/cs8427.h>
 #include <media/gpio-ir-recv.h>
 #include <linux/fmem.h>
@@ -108,6 +109,7 @@
 #include "pm-boot.h"
 #include "devices-msm8x60.h"
 #include "smd_private.h"
+#include "sysmon.h"
 
 #if defined(CONFIG_VIDEO_MHL_V2)
 #include <linux/sii8240.h>
@@ -169,12 +171,13 @@ static void sensor_power_on_vdd(int, int);
 
 #ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
 #define HOLE_SIZE		0x20000
+#define MSM_ION_MFC_META_SIZE  0x40000 /* 256 Kbytes */
 #define MSM_CONTIG_MEM_SIZE  0x65000
 #ifdef CONFIG_MSM_IOMMU
 #define MSM_ION_MM_SIZE		0x6200000    /* 56MB(0x3800000) -> 98MB */
 #define MSM_ION_SF_SIZE		0
 #define MSM_ION_QSECOM_SIZE	0x1700000    /* 7.5MB(0x780000) -> 23MB */
-#define MSM_ION_HEAP_NUM	7
+#define MSM_ION_HEAP_NUM	8
 #else
 #define MSM_ION_MM_SIZE		MSM_PMEM_ADSP_SIZE
 #define MSM_ION_SF_SIZE		MSM_PMEM_SIZE
@@ -182,7 +185,7 @@ static void sensor_power_on_vdd(int, int);
 #define MSM_ION_HEAP_NUM	8
 #endif
 #define MSM_ION_MM_FW_SIZE	(0x200000 - HOLE_SIZE) /* (2MB - 128KB) */
-#define MSM_ION_MFC_SIZE	SZ_8K
+#define MSM_ION_MFC_SIZE	(SZ_8K + MSM_ION_MFC_META_SIZE)
 #define MSM_ION_AUDIO_SIZE	MSM_PMEM_AUDIO_SIZE
 #else
 #define MSM_CONTIG_MEM_SIZE  0x110C000
@@ -194,6 +197,7 @@ static void sensor_power_on_vdd(int, int);
 #define MAX_FIXED_AREA_SIZE	0x10000000
 #define MSM_MM_FW_SIZE		(0x200000 - HOLE_SIZE)
 #define APQ8064_FW_START	APQ8064_FIXED_AREA_START
+#define MSM_ION_ADSP_SIZE	SZ_8M
 
 #define QFPROM_RAW_FEAT_CONFIG_ROW0_MSB     (MSM_QFPROM_BASE + 0x23c)
 #define QFPROM_RAW_OEM_CONFIG_ROW0_LSB      (MSM_QFPROM_BASE + 0x220)
@@ -526,6 +530,13 @@ static struct platform_device apq8064_android_pmem_audio_device = {
 #endif /* CONFIG_MSM_MULTIMEDIA_USE_ION */
 #endif /* CONFIG_ANDROID_PMEM */
 
+#ifdef CONFIG_BATTERY_BCL  
+static struct platform_device battery_bcl_device = {
+	.name = "battery_current_limit",
+	.id = -1,
+};
+#endif
+
 struct fmem_platform_data apq8064_fmem_pdata = {
 };
 
@@ -633,6 +644,14 @@ static struct platform_device ion_mm_heap_device = {
 	}
 };
 
+static struct platform_device ion_adsp_heap_device = {
+	.name = "ion-adsp-heap-device",
+	.id = -1,
+	.dev = {
+		.dma_mask = &msm_dmamask,
+		.coherent_dma_mask = DMA_BIT_MASK(32),
+	}
+};
 /**
  * These heaps are listed in the order they will be allocated. Due to
  * video hardware restrictions and content protection the FW heap has to
@@ -706,6 +725,15 @@ struct ion_platform_heap apq8064_heaps[] = {
 			.size	= MSM_ION_AUDIO_SIZE,
 			.memory_type = ION_EBI_TYPE,
 			.extra_data = (void *) &co_apq8064_ion_pdata,
+		},
+		{
+			.id     = ION_ADSP_HEAP_ID,
+			.type   = ION_HEAP_TYPE_DMA,
+			.name   = ION_ADSP_HEAP_NAME,
+			.size   = MSM_ION_ADSP_SIZE,
+			.memory_type = ION_EBI_TYPE,
+			.extra_data = (void *) &co_apq8064_ion_pdata,
+			.priv = &ion_adsp_heap_device.dev,
 		},
 #endif
 };
@@ -836,7 +864,7 @@ static void __init reserve_ion_memory(void)
 
 			if (fixed_position != NOT_FIXED)
 				fixed_size += heap->size;
-			else
+			else if (!use_cma)
 				reserve_mem_for_ion(MEMTYPE_EBI1, heap->size);
 
 			if (fixed_position == FIXED_LOW) {
@@ -956,8 +984,23 @@ static void __init reserve_ion_memory(void)
 }
 
 #ifdef CONFIG_ANDROID_RAM_CONSOLE
+static char bootreason[128] = {0,};
+int __init device_boot_reason(char *s)
+{
+	int n;
+
+	if (*s == '=')
+		s++;
+	n = snprintf(bootreason, sizeof(bootreason),
+		 "Boot info:\n"
+		 "Last boot reason: %s\n", s);
+	bootreason[n] = '\0';
+	return 1;
+}
+__setup("bootreason", device_boot_reason);
+
 static struct ram_console_platform_data ram_console_pdata = {
-	.bootinfo = NULL,
+	.bootinfo = bootreason,
 };
 
 static struct platform_device ram_console_device = {
@@ -1124,35 +1167,6 @@ static struct i2c_board_info touchkey_i2c_devices_info[] __initdata = {
 	},
 };
 
-
-static struct i2c_gpio_platform_data  cypress_touchkey_i2c_gpio_data = {
-	.sda_pin		= GPIO_TOUCHKEY_SDA,	
-	.scl_pin		= GPIO_TOUCHKEY_SCL,
-	.udelay			= 0,
-	.sda_is_open_drain	= 0,
-	.scl_is_open_drain	= 0,
-	.scl_is_output_only	= 0,
-};
-static struct platform_device touchkey_i2c_gpio_device = {
-	.name			= "i2c-gpio",
-	.id			= MSM_TOUCHKEY_I2C_BUS_ID,
-	.dev.platform_data	= &cypress_touchkey_i2c_gpio_data,
-};
-
-static struct i2c_gpio_platform_data  cypress_touchkey_i2c_gpio_data_2 = {
-	.sda_pin		= GPIO_TOUCHKEY_SDA,	
-	.scl_pin		= GPIO_TOUCHKEY_SCL_2,
-	.udelay			= 0,
-	.sda_is_open_drain	= 0,
-	.scl_is_open_drain	= 0,
-	.scl_is_output_only	= 0,
-};
-static struct platform_device touchkey_i2c_gpio_device_2 = {
-	.name			= "i2c-gpio",
-	.id			= MSM_TOUCHKEY_I2C_BUS_ID,
-	.dev.platform_data	= &cypress_touchkey_i2c_gpio_data_2,
-};
-
 #endif
 
 static char prim_panel_name[PANEL_NAME_MAX_LEN];
@@ -1197,7 +1211,6 @@ static void __init apq8064_reserve(void)
 static void __init apq8064_early_reserve(void)
 {
 	reserve_info = &apq8064_reserve_info;
-
 }
 #ifdef CONFIG_USB_EHCI_MSM_HSIC
 /* Bandwidth requests (zero) if no vote placed */
@@ -1867,6 +1880,48 @@ struct pm8xxx_mpp_config_data mpp4_cfg = {
 
 #define MPP_MCU_NRST PM8921_MPP_PM_TO_SYS(4)
 
+static void clear_ssp_gpio(void)
+{
+	struct pm_gpio ap_mcu_int_cfg = {
+		.direction = PM_GPIO_DIR_IN,
+		.pull = PM_GPIO_PULL_DN,
+		.vin_sel = 2,
+		.function = PM_GPIO_FUNC_NORMAL,
+		.inv_int_pol = 0,
+	};
+	struct pm_gpio mcu_ap_int_2_cfg = {
+		.direction = PM_GPIO_DIR_IN,
+		.pull = PM_GPIO_PULL_DN,
+		.vin_sel = 2,
+		.function = PM_GPIO_FUNC_NORMAL,
+		.inv_int_pol = 0,
+	};
+	struct pm_gpio mcu_ap_int_cfg = {
+		.direction = PM_GPIO_DIR_IN,
+		.pull = PM_GPIO_PULL_DN,
+		.vin_sel = 2,
+		.function = PM_GPIO_FUNC_NORMAL,
+		.inv_int_pol = 0,
+	};
+	struct pm_gpio ap_mcu_nrst_cfg = {
+		.direction = PM_GPIO_DIR_OUT,
+		.pull = PM_GPIO_PULL_NO,
+		.vin_sel = 2,
+		.function = PM_GPIO_FUNC_NORMAL,
+		.inv_int_pol = 0,
+		.out_strength = PM_GPIO_STRENGTH_HIGH,
+	};
+
+	pm8xxx_gpio_config(GPIO_AP_MCU_INT, &ap_mcu_int_cfg);
+	pm8xxx_gpio_config(GPIO_MCU_AP_INT, &mcu_ap_int_cfg);
+	pm8xxx_gpio_config(GPIO_MCU_AP_INT_2, &mcu_ap_int_2_cfg);
+	if (system_rev >= 5)
+		pm8xxx_gpio_config(GPIO_MCU_NRST, &ap_mcu_nrst_cfg);
+	gpio_set_value_cansleep(GPIO_MCU_NRST, 0);
+	mdelay(1);
+	pr_info("[SSP] %s done\n", __func__);
+}
+
 static int initialize_ssp_gpio(void)
 {
 	int err;
@@ -1898,6 +1953,7 @@ static int initialize_ssp_gpio(void)
 		.vin_sel = 2,
 		.function = PM_GPIO_FUNC_NORMAL,
 		.inv_int_pol = 0,
+		.out_strength = PM_GPIO_STRENGTH_HIGH,
 	};
 
 	pr_info("[SSP]%s\n", __func__);
@@ -2025,32 +2081,36 @@ static void bcm2079x_sw_i2c_config(void)
 		GPIO_CFG_NO_PULL, GPIO_CFG_2MA), 1);
 }
 #endif
+#define GPIO_NFC_FIRMWARE_REV2	PM8921_GPIO_PM_TO_SYS(12)
 static int __init bcm2079x_init(void)
 {
 	struct pm_gpio nfc_irq_cfg = {
 		.direction = PM_GPIO_DIR_IN,
-		.pull = PM_GPIO_PULL_NO,
+		.pull = PM_GPIO_PULL_DN,
 		.vin_sel = 2,
 		.function = PM_GPIO_FUNC_NORMAL,
 		.inv_int_pol = 0,
 	};
 	struct pm_gpio nfc_en_cfg = {
 		.direction = PM_GPIO_DIR_OUT,
-		.pull = PM_GPIO_PULL_UP_31P5,
+		.pull = PM_GPIO_PULL_DN,
 		.vin_sel = 2,
 		.function = PM_GPIO_FUNC_NORMAL,
 		.inv_int_pol = 0,
 	};
 	struct pm_gpio nfc_firmware_cfg = {
 		.direction = PM_GPIO_DIR_OUT,
-		.pull = PM_GPIO_PULL_UP_31P5,
+		.pull = PM_GPIO_PULL_NO,
 		.vin_sel = 2,
 		.function = PM_GPIO_FUNC_NORMAL,
 		.inv_int_pol = 0,
 	};
 	pm8xxx_gpio_config(GPIO_NFC_IRQ, &nfc_irq_cfg);
 	pm8xxx_gpio_config(GPIO_NFC_EN, &nfc_en_cfg);
-	pm8xxx_gpio_config(GPIO_NFC_FIRMWARE, &nfc_firmware_cfg);
+	if (system_rev > BOARD_REV13)
+		pm8xxx_gpio_config(GPIO_NFC_FIRMWARE_REV2, &nfc_firmware_cfg);
+	else
+		pm8xxx_gpio_config(GPIO_NFC_FIRMWARE, &nfc_firmware_cfg);
 #ifdef NFC_SW_I2C
 	bcm2079x_sw_i2c_config();
 #endif
@@ -2075,7 +2135,7 @@ static struct platform_device bcm2079x_i2c_gpio_device = {
 static struct bcm2079x_platform_data bcm2079x_i2c_pdata = {
 	.irq_gpio = GPIO_NFC_IRQ,
 	.en_gpio = GPIO_NFC_EN,
-	.wake_gpio = GPIO_NFC_FIRMWARE,
+	.wake_gpio = GPIO_NFC_FIRMWARE_REV2,
 };
 
 static struct i2c_board_info nfc_bcm2079x_info[] __initdata = {
@@ -2943,7 +3003,7 @@ static struct mdm_vddmin_resource mdm_vddmin_rscs = {
 
 static struct gpiomux_setting mdm2ap_status_gpio_run_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
-	.drv = GPIOMUX_DRV_8MA,
+	.drv = GPIOMUX_DRV_2MA,
 	.pull = GPIOMUX_PULL_NONE,
 };
 
@@ -2952,10 +3012,78 @@ static struct mdm_platform_data mdm_platform_data = {
 	.ramdump_delay_ms = 2000,
 	.early_power_on = 1,
 	.sfr_query = 1,
+	.send_shdn = 1,
 	.vddmin_resource = &mdm_vddmin_rscs,
 	.peripheral_platform_device = &apq8064_device_hsic_host,
 	.ramdump_timeout_ms = 120000,
 	.mdm2ap_status_gpio_run_cfg = &mdm2ap_status_gpio_run_cfg,
+	.sysmon_subsys_id_valid = 1,
+	.sysmon_subsys_id = SYSMON_SS_EXT_MODEM,
+};
+
+static struct mdm_platform_data amdm_platform_data = {
+	.mdm_version = "3.0",
+	.ramdump_delay_ms = 2000,
+	.early_power_on = 1,
+	.sfr_query = 1,
+	.send_shdn = 1,
+	.vddmin_resource = &mdm_vddmin_rscs,
+	.peripheral_platform_device = &apq8064_device_hsic_host,
+	.ramdump_timeout_ms = 120000,
+	.mdm2ap_status_gpio_run_cfg = &mdm2ap_status_gpio_run_cfg,
+	.sysmon_subsys_id_valid = 1,
+	.sysmon_subsys_id = SYSMON_SS_EXT_MODEM,
+	.no_a2m_errfatal_on_ssr = 1,
+};
+
+static struct mdm_vddmin_resource bmdm_vddmin_rscs = {
+	.rpm_id = MSM_RPM_ID_VDDMIN_GPIO,
+	.ap2mdm_vddmin_gpio = 30,
+	.modes  = 0x03,
+	.drive_strength = 8,
+	.mdm2ap_vddmin_gpio = 64,
+};
+
+static struct mdm_platform_data bmdm_platform_data = {
+	.mdm_version = "3.0",
+	.ramdump_delay_ms = 2000,
+	.sfr_query = 1,
+	.send_shdn = 1,
+	.vddmin_resource = &bmdm_vddmin_rscs,
+	.peripheral_platform_device = &apq8064_device_ehci_host3,
+	.ramdump_timeout_ms = 120000,
+	.mdm2ap_status_gpio_run_cfg = &mdm2ap_status_gpio_run_cfg,
+	.sysmon_subsys_id_valid = 1,
+	.sysmon_subsys_id = SYSMON_SS_EXT_MODEM2,
+	.no_a2m_errfatal_on_ssr = 1,
+};
+
+static struct mdm_platform_data sglte2_mdm_platform_data = {
+	.mdm_version = "3.0",
+	.ramdump_delay_ms = 2000,
+	.early_power_on = 1,
+	.sfr_query = 1,
+	.vddmin_resource = &mdm_vddmin_rscs,
+	.peripheral_platform_device = &apq8064_device_hsic_host,
+	.ramdump_timeout_ms = 120000,
+	.mdm2ap_status_gpio_run_cfg = &mdm2ap_status_gpio_run_cfg,
+	.sysmon_subsys_id_valid = 1,
+	.sysmon_subsys_id = SYSMON_SS_EXT_MODEM,
+	.no_a2m_errfatal_on_ssr = 1,
+	.subsys_name = "external_modem_mdm",
+};
+
+static struct mdm_platform_data sglte2_qsc_platform_data = {
+	.mdm_version = "3.0",
+	.ramdump_delay_ms = 2000,
+     /* delay between two PS_HOLDs */
+	.ps_hold_delay_ms = 500,
+	.ramdump_timeout_ms = 600000,
+	.no_powerdown_after_ramdumps = 1,
+	.image_upgrade_supported = 1,
+	.no_a2m_errfatal_on_ssr = 1,
+	.kpd_not_inverted = 1,
+	.subsys_name = "external_modem",
 };
 
 static struct tsens_platform_data apq_tsens_pdata  = {
@@ -2977,6 +3105,9 @@ static struct msm_thermal_data msm_thermal_pdata = {
 	.limit_temp_degC = 60,
 	.temp_hysteresis_degC = 10,
 	.freq_step = 2,
+	.core_limit_temp_degC = 80,
+	.core_temp_hysteresis_degC = 10,
+	.core_control_mask = 0xe,
 };
 
 #define MSM_SHARED_RAM_PHYS 0x80000000
@@ -3034,6 +3165,29 @@ static struct platform_device msm8064_device_saw_regulator_core3 = {
 	},
 };
 
+#ifdef CONFIG_CAMERA_SW_I2C_ACT
+static struct i2c_gpio_platform_data hvca_i2c_gpio_data = {
+	.sda_pin = 71,
+	.scl_pin = 70,
+	.udelay = 5,
+};
+struct platform_device hvca_i2c_gpio_device = {
+	.name = "i2c-gpio",
+	.id = MSM_CAMERA_SW_I2C_BUS_ID, // 27
+	.dev = {
+		.platform_data  = &hvca_i2c_gpio_data,
+	},
+};
+#endif
+static struct spi_board_info eeprom_spi_info[] __initdata = {
+    {
+        .modalias               = "imx175_spi",
+        .max_speed_hz           = 9963243,
+        .bus_num                = 0,
+        .chip_select            = 0,
+        .mode                   = SPI_MODE_0,
+    },
+};
 static struct msm_rpmrs_level msm_rpmrs_levels[] = {
 	{
 		MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT,
@@ -3134,11 +3288,33 @@ static uint8_t spm_power_collapse_without_rpm[] __initdata = {
 	0x24, 0x30, 0x0f,
 };
 
+static uint8_t spm_retention_with_krait_v3_cmd_sequence[] __initdata = {
+	0x42, 0x1B, 0x00,
+	0x05, 0x03, 0x0D, 0x0B,
+	0x00, 0x42, 0x1B,
+	0x0f,
+};
+
 static uint8_t spm_power_collapse_with_rpm[] __initdata = {
 	0x00, 0x24, 0x54, 0x10,
 	0x09, 0x07, 0x01, 0x0B,
 	0x10, 0x54, 0x30, 0x0C,
 	0x24, 0x30, 0x0f,
+};
+
+/* 8064AB has a different command to assert apc_pdn */
+static uint8_t spm_power_collapse_without_rpm_krait_v3[] __initdata = {
+    0x00, 0x24, 0x84, 0x10,
+    0x09, 0x03, 0x01,
+    0x10, 0x84, 0x30, 0x0C,
+    0x24, 0x30, 0x0f,
+};
+
+static uint8_t spm_power_collapse_with_rpm_krait_v3[] __initdata = {
+    0x00, 0x24, 0x84, 0x10,
+    0x09, 0x07, 0x01, 0x0B,
+    0x10, 0x84, 0x30, 0x0C,
+    0x24, 0x30, 0x0f,
 };
 
 static struct msm_spm_seq_entry msm_spm_seq_list[] __initdata = {
@@ -3148,11 +3324,16 @@ static struct msm_spm_seq_entry msm_spm_seq_list[] __initdata = {
 		.cmd = spm_wfi_cmd_sequence,
 	},
 	[1] = {
+		.mode = MSM_SPM_MODE_POWER_RETENTION,
+		.notify_rpm = false,
+		.cmd = spm_retention_cmd_sequence,
+	},
+	[2] = {
 		.mode = MSM_SPM_MODE_POWER_COLLAPSE,
 		.notify_rpm = false,
 		.cmd = spm_power_collapse_without_rpm,
 	},
-	[2] = {
+	[3] = {
 		.mode = MSM_SPM_MODE_POWER_COLLAPSE,
 		.notify_rpm = true,
 		.cmd = spm_power_collapse_with_rpm,
@@ -3232,9 +3413,9 @@ static struct msm_spm_platform_data msm_spm_data[] __initdata = {
 		.reg_init_values[MSM_SPM_REG_SAW2_AVS_HYSTERESIS] = 0x00,
 #endif
 		.reg_init_values[MSM_SPM_REG_SAW2_SPM_CTL] = 0x01,
-		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DLY] = 0x02020204,
-		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_0] = 0x0060009C,
-		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_1] = 0x0000001C,
+		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DLY] = 0x03020004,
+		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_0] = 0x0084009C,
+		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_1] = 0x00A4001C,
 		.vctl_timeout_us = 50,
 		.num_modes = ARRAY_SIZE(msm_spm_seq_list),
 		.modes = msm_spm_seq_list,
@@ -3247,9 +3428,9 @@ static struct msm_spm_platform_data msm_spm_data[] __initdata = {
 		.reg_init_values[MSM_SPM_REG_SAW2_AVS_HYSTERESIS] = 0x00,
 #endif
 		.reg_init_values[MSM_SPM_REG_SAW2_SPM_CTL] = 0x01,
-		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DLY] = 0x02020204,
-		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_0] = 0x0060009C,
-		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_1] = 0x0000001C,
+		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DLY] = 0x03020004,
+		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_0] = 0x0084009C,
+		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_1] = 0x00A4001C,
 		.vctl_timeout_us = 50,
 		.num_modes = ARRAY_SIZE(msm_spm_seq_list),
 		.modes = msm_spm_seq_list,
@@ -3262,14 +3443,35 @@ static struct msm_spm_platform_data msm_spm_data[] __initdata = {
 		.reg_init_values[MSM_SPM_REG_SAW2_AVS_HYSTERESIS] = 0x00,
 #endif
 		.reg_init_values[MSM_SPM_REG_SAW2_SPM_CTL] = 0x01,
-		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DLY] = 0x02020204,
-		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_0] = 0x0060009C,
-		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_1] = 0x0000001C,
+		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DLY] = 0x03020004,
+		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_0] = 0x0084009C,
+		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_1] = 0x00A4001C,
 		.vctl_timeout_us = 50,
 		.num_modes = ARRAY_SIZE(msm_spm_seq_list),
 		.modes = msm_spm_seq_list,
 	},
 };
+
+static void __init apq8064ab_update_krait_spm(void)
+{
+	int i;
+
+	/* Update the SPM sequences for SPC and PC */
+	for (i = 0; i < ARRAY_SIZE(msm_spm_data); i++) {
+		int j;
+		struct msm_spm_platform_data *pdata = &msm_spm_data[i];
+		for (j = 0; j < pdata->num_modes; j++) {
+			if (pdata->modes[j].cmd ==
+					spm_power_collapse_without_rpm)
+				pdata->modes[j].cmd =
+				spm_power_collapse_without_rpm_krait_v3;
+			else if (pdata->modes[j].cmd ==
+					spm_power_collapse_with_rpm)
+				pdata->modes[j].cmd =
+				spm_power_collapse_with_rpm_krait_v3;
+		}
+	}
+}
 
 static void __init apq8064_init_buses(void)
 {
@@ -3615,13 +3817,14 @@ static struct platform_device uv_device = {
 static struct platform_device *common_not_mpq_devices[] __initdata = {
 	&apq8064_device_qup_i2c_gsbi1,
 	&apq8064_device_qup_i2c_gsbi3,
-	&apq8064_device_qup_i2c_gsbi4,
 };
 
 static struct platform_device *early_common_devices[] __initdata = {
 	&apq8064_device_acpuclk,
 	&apq8064_device_dmov,
+#if !defined(CONFIG_MACH_JACTIVE_ATT) && !defined(CONFIG_MACH_JACTIVE_EUR)
 	&apq8064_device_qup_spi_gsbi5,
+#endif 
 };
 
 static struct platform_device *pm8921_common_devices[] __initdata = {
@@ -3630,7 +3833,6 @@ static struct platform_device *pm8921_common_devices[] __initdata = {
 	&apq8064_device_ext_3p3v_vreg,
 	&apq8064_device_ssbi_pmic1,
 	&apq8064_device_ssbi_pmic2,
-	&apq8064_device_ext_ts_sw_vreg,
 };
 
 static struct platform_device *pm8917_common_devices[] __initdata = {
@@ -3638,7 +3840,6 @@ static struct platform_device *pm8917_common_devices[] __initdata = {
 	&apq8064_device_ext_3p3v_vreg,
 	&apq8064_device_ssbi_pmic1,
 	&apq8064_device_ssbi_pmic2,
-	&apq8064_device_ext_ts_sw_vreg,
 };
 
 static struct platform_device *common_devices[] __initdata = {
@@ -3651,6 +3852,9 @@ static struct platform_device *common_devices[] __initdata = {
 	&apq8064_device_hsusb_host,
 	&android_usb_device,
 	&msm_device_wcnss_wlan,
+#if defined(CONFIG_MACH_JACTIVE_ATT) || defined(CONFIG_MACH_JACTIVE_EUR)
+	&apq8064_device_qup_spi_gsbi5,
+#endif
 	&msm_device_iris_fm,
 	&apq8064_fmem_device,
 #ifdef CONFIG_ANDROID_PMEM
@@ -3791,6 +3995,9 @@ static struct platform_device *common_devices[] __initdata = {
 #ifdef CONFIG_ANDROID_RAM_CONSOLE
 	&ram_console_device,
 #endif
+#ifdef CONFIG_CAMERA_SW_I2C_ACT
+	&hvca_i2c_gpio_device,
+#endif
 };
 
 static struct platform_device *cdp_devices[] __initdata = {
@@ -3800,6 +4007,7 @@ static struct platform_device *cdp_devices[] __initdata = {
 #ifdef CONFIG_MSM_ROTATOR
 	&msm_rotator_device,
 #endif
+	&msm8064_cpu_slp_status,
 	&sec_device_jack,
 #ifdef CONFIG_SENSORS_SSP_C12SD
 	&uv_device,
@@ -3896,6 +4104,20 @@ static int rf4ce_gpio_init(void)
 }
 late_initcall(rf4ce_gpio_init);
 
+#ifdef CONFIG_SERIAL_MSM_HS
+static struct msm_serial_hs_platform_data mpq8064_gsbi6_uartdm_pdata = {
+	.config_gpio		= 4,
+	.uart_tx_gpio		= 14,
+	.uart_rx_gpio		= 15,
+	.uart_cts_gpio		= 16,
+	.uart_rfr_gpio		= 17,
+	.inject_rx_on_wakeup	= 1,
+	.rx_to_inject		= 0xFD,
+};
+#else
+static struct msm_serial_hs_platform_data msm_uart_dm9_pdata;
+#endif
+
 static struct platform_device *mpq_devices[] __initdata = {
 	&msm_device_sps_apq8064,
 	&mpq8064_device_qup_i2c_gsbi5,
@@ -3944,20 +4166,38 @@ static struct spi_board_info spi_board_info[] __initdata = {
 static int  es325_enable_VDD_CORE(void)
 {
 	static struct regulator *l18;
+	static struct regulator *l27;
 	int ret;
-
-	l18 = regulator_get(NULL, "8921_l18");
-	if (IS_ERR(l18)) {
-		pr_err("%s: error regulator_get\n", __func__);
-		return -1;
+	
+	if (system_rev <= 13 ) {
+		l18 = regulator_get(NULL, "8921_l18");
+		if (IS_ERR(l18)) {
+			pr_err("%s: error regulator_get\n", __func__);
+			return -1;
+		}
+		ret = regulator_set_voltage(l18, 1100000, 1100000);
+		if (ret)
+			pr_err("%s: error set voltage ret=%d\n", __func__, ret);
+		ret = regulator_enable(l18);
+		if (ret) {
+			pr_err("%s: error enable l18 ret=%d\n", __func__, ret);
+			return -1;
+		}
 	}
-	ret = regulator_set_voltage(l18, 1100000, 1100000);
-	if (ret)
-		pr_err("%s: error set voltage ret=%d\n", __func__, ret);
-	ret = regulator_enable(l18);
-	if (ret) {
-		pr_err("%s: error enable l18 ret=%d\n", __func__, ret);
-		return -1;
+	else {
+		l27 = regulator_get(NULL, "8921_l27");
+		if (IS_ERR(l27)) {
+			pr_err("%s: error regulator_get\n", __func__);
+			return -1;
+		}
+		ret = regulator_set_voltage(l27, 1100000, 1100000);
+		if (ret)
+			pr_err("%s: error set voltage ret=%d\n", __func__, ret);
+		ret = regulator_enable(l27);
+		if (ret) {
+			pr_err("%s: error enable l27 ret=%d\n", __func__, ret);
+			return -1;
+		}
 	}
 	return 0;
 }
@@ -4134,8 +4374,13 @@ static void __init apq8064_i2c_init(void)
 					&apq8064_i2c_qup_gsbi3_pdata;
 	apq8064_device_qup_i2c_gsbi1.dev.platform_data =
 					&apq8064_i2c_qup_gsbi1_pdata;
-	apq8064_device_qup_i2c_gsbi4.dev.platform_data =
+
+	/* Add GSBI4 I2C pdata for non-fusion3 SGLTE2 */
+	if (socinfo_get_platform_subtype() !=
+				PLATFORM_SUBTYPE_SGLTE2) {
+		apq8064_device_qup_i2c_gsbi4.dev.platform_data =
 					&apq8064_i2c_qup_gsbi4_pdata;
+	}
 	mpq8064_device_qup_i2c_gsbi5.dev.platform_data =
 					&mpq8064_i2c_qup_gsbi5_pdata;
 	apq8064_device_qup_i2c_gsbi2.dev.platform_data =
@@ -4186,15 +4431,6 @@ static struct gpio_keys_button gpio_keys_button[] = {
 		.debounce_interval = 5,
 	},
 	{
-		.code           = KEY_HOMEPAGE,
-		.gpio           = GPIO_KEY_HOME,
-		.desc           = "home_key",
-		.active_low     = 1,
-		.type		= EV_KEY,
-		.wakeup		= 1,
-		.debounce_interval = 5,
-	},
-	{
 		.code           = KEY_MENU,
 		.gpio           = GPIO_KEY_MENU,
 		.desc           = "menu_key",
@@ -4210,6 +4446,15 @@ static struct gpio_keys_button gpio_keys_button[] = {
 		.active_low     = 1,
 		.type		= EV_KEY,
 		.wakeup		= 0,
+		.debounce_interval = 5,
+	},
+	{
+		.code           = KEY_HOMEPAGE,
+		.gpio           = GPIO_KEY_HOME,
+		.desc           = "home_key",
+		.active_low     = 1,
+		.type		= EV_KEY,
+		.wakeup		= 1,
 		.debounce_interval = 5,
 	},
 };
@@ -4682,6 +4927,7 @@ static void __init register_i2c_devices(void)
 		apq8064_camera_board_info.board_info,
 		apq8064_camera_board_info.num_i2c_board_info,
 	};
+
 	struct i2c_registry apq8064_front_camera_i2c_devices = {
 		I2C_SURF | I2C_FFA | I2C_LIQUID | I2C_RUMI,
 		APQ_8064_GSBI7_QUP_I2C_BUS_ID,
@@ -4726,20 +4972,6 @@ static void __init register_i2c_devices(void)
 					mpq8064_i2c_devices[i].bus,
 					mpq8064_i2c_devices[i].info,
 					mpq8064_i2c_devices[i].len);
-	}
-}
-
-static void enable_ddr3_regulator(void)
-{
-	static struct regulator *ext_ddr3;
-
-	/* Use MPP7 output state as a flag for PCDDR3 presence. */
-	if (gpio_get_value_cansleep(PM8921_MPP_PM_TO_SYS(7)) > 0) {
-		ext_ddr3 = regulator_get(NULL, "ext_ddr3");
-		if (IS_ERR(ext_ddr3) || ext_ddr3 == NULL)
-			pr_err("Could not get MPP7 regulator\n");
-		else
-			regulator_enable(ext_ddr3);
 	}
 }
 
@@ -4896,9 +5128,40 @@ static void vps_sound_init(void)
 			&vps_sound_en);
 
 }
+
+#ifdef CONFIG_SERIAL_MSM_HS
+static struct msm_serial_hs_platform_data apq8064_uartdm_gsbi4_pdata = {
+	.config_gpio	= 4,
+	.uart_tx_gpio	= 10,
+	.uart_rx_gpio	= 11,
+	.uart_cts_gpio	= 12,
+	.uart_rfr_gpio	= 13,
+};
+#else
+static struct msm_serial_hs_platform_data apq8064_uartdm_gsbi4_pdata;
+#endif
+
+static void __init apq8064ab_update_retention_spm(void)
+{
+	int i;
+
+	/* Update the SPM sequences for krait retention on all cores */
+	for (i = 0; i < ARRAY_SIZE(msm_spm_data); i++) {
+		int j;
+		struct msm_spm_platform_data *pdata = &msm_spm_data[i];
+		for (j = 0; j < pdata->num_modes; j++) {
+			if (pdata->modes[j].cmd ==
+					spm_retention_cmd_sequence)
+				pdata->modes[j].cmd =
+				spm_retention_with_krait_v3_cmd_sequence;
+		}
+	}
+}
+
 static void __init apq8064_common_init(void)
 {
-	u32 platform_version;
+	u32 platform_version = socinfo_get_platform_version();
+	struct msm_rpmrs_level rpmrs_level;
 
 #ifdef CONFIG_KEYBOARD_CYPRESS_TOUCH_236
 	int ret;
@@ -4909,6 +5172,17 @@ static void __init apq8064_common_init(void)
 		apq8064_pm8917_pdata_fixup();
 #endif
 	platform_device_register(&msm_gpio_device);
+	if (cpu_is_apq8064ab())
+		apq8064ab_update_krait_spm();
+	if (cpu_is_krait_v3()) {
+		struct msm_pm_init_data_type *pdata =
+				msm8064_pm_8x60.dev.platform_data;
+		pdata->retention_calls_tz = false;
+		apq8064ab_update_retention_spm();
+	}
+	platform_device_register(&msm8064_pm_8x60);
+	msm_spm_init(msm_spm_data, ARRAY_SIZE(msm_spm_data));
+	msm_spm_l2_init(msm_spm_l2_data);
 	msm_tsens_early_init(&apq_tsens_pdata);
 	msm_thermal_init(&msm_thermal_pdata);
 	if (socinfo_init() < 0)
@@ -4929,8 +5203,6 @@ static void __init apq8064_common_init(void)
 	apq8064_i2c_init();
 	register_i2c_devices();
 
-	apq8064_device_qup_spi_gsbi5.dev.platform_data =
-						&apq8064_qup_spi_gsbi5_pdata;
 	apq8064_init_pmic();
 	if (machine_is_apq8064_liquid())
 		msm_otg_pdata.mhl_enable = true;
@@ -4950,34 +5222,66 @@ static void __init apq8064_common_init(void)
 	else
 		platform_add_devices(pm8917_common_devices,
 					ARRAY_SIZE(pm8917_common_devices));
+
+	if (!machine_is_apq8064_mtp())
+		platform_device_register(&apq8064_device_ext_ts_sw_vreg);
+
 	platform_add_devices(common_devices, ARRAY_SIZE(common_devices));
 	if (!(machine_is_mpq8064_cdp() || machine_is_mpq8064_hrd() ||
-			machine_is_mpq8064_dtv()))
+			machine_is_mpq8064_dtv())) {
 		platform_add_devices(common_not_mpq_devices,
 			ARRAY_SIZE(common_not_mpq_devices));
 	
-#ifdef CONFIG_KEYBOARD_CYPRESS_TOUCH_236
-	if (system_rev < 9)
-		platform_device_register(&touchkey_i2c_gpio_device);
-	else
-		platform_device_register(&touchkey_i2c_gpio_device_2);
-#endif
+		/* Add GSBI4 I2C Device for non-fusion3 platform */
+		if (socinfo_get_platform_subtype() !=
+				PLATFORM_SUBTYPE_SGLTE2) {
+			platform_device_register(&apq8064_device_qup_i2c_gsbi4);
+		}
+	}
 
-	enable_ddr3_regulator();
-	msm_hsic_pdata.swfi_latency =
-		msm_rpmrs_levels[0].latency_us;
+	rpmrs_level =
+		msm_rpmrs_levels[MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT];
+	msm_hsic_pdata.swfi_latency = rpmrs_level.latency_us;
+	rpmrs_level =
+		msm_rpmrs_levels[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE];
+	msm_hsic_pdata.standalone_latency = rpmrs_level.latency_us;
+
 	if (machine_is_apq8064_mtp() || machine_is_JF()) {
 		msm_hsic_pdata.log2_irq_thresh = 5,
 		apq8064_device_hsic_host.dev.platform_data = &msm_hsic_pdata;
 		device_initialize(&apq8064_device_hsic_host.dev);
+		if (socinfo_get_platform_subtype() == PLATFORM_SUBTYPE_DSDA2) {
+			apq8064_device_ehci_host3.dev.platform_data =
+				&msm_ehci_host_pdata3;
+			device_initialize(&apq8064_device_ehci_host3.dev);
+		}
 	}
 	apq8064_pm8xxx_gpio_mpp_init();
 	apq8064_init_mmc();
 
 	if (machine_is_apq8064_mtp()|| machine_is_JF()) {
-		mdm_8064_device.dev.platform_data = &mdm_platform_data;
-		platform_version = socinfo_get_platform_version();
-		if (SOCINFO_VERSION_MINOR(platform_version) == 1) {
+		if (socinfo_get_platform_subtype() == PLATFORM_SUBTYPE_DSDA2) {
+			amdm_8064_device.dev.platform_data =
+				&amdm_platform_data;
+			platform_device_register(&amdm_8064_device);
+			bmdm_8064_device.dev.platform_data =
+				&bmdm_platform_data;
+			platform_device_register(&bmdm_8064_device);
+		} else if (socinfo_get_platform_subtype() ==
+				   PLATFORM_SUBTYPE_SGLTE2) {
+			sglte_mdm_8064_device.dev.platform_data =
+				&sglte2_mdm_platform_data;
+			platform_device_register(&sglte_mdm_8064_device);
+			sglte2_qsc_8064_device.dev.platform_data =
+				&sglte2_qsc_platform_data;
+			platform_device_register(&sglte2_qsc_8064_device);
+ 
+			/* GSBI4 UART device for Primay IPC */
+			apq8064_uartdm_gsbi4_pdata.wakeup_irq = gpio_to_irq(11);
+			apq8064_device_uartdm_gsbi4.dev.platform_data =
+						&apq8064_uartdm_gsbi4_pdata;
+			platform_device_register(&apq8064_device_uartdm_gsbi4);
+		} else if (SOCINFO_VERSION_MINOR(platform_version) == 1) {
 			i2s_mdm_8064_device.dev.platform_data =
 				&mdm_platform_data;
 			platform_device_register(&i2s_mdm_8064_device);
@@ -4999,8 +5303,6 @@ static void __init apq8064_common_init(void)
 		apq8064_init_dsps();
 		platform_device_register(&msm_8960_riva);
 	}
-	msm_spm_init(msm_spm_data, ARRAY_SIZE(msm_spm_data));
-	msm_spm_l2_init(msm_spm_l2_data);
 	BUG_ON(msm_pm_boot_init(&msm_pm_boot_pdata));
 	apq8064_epm_adc_init();
 	samsung_sys_class_init();
@@ -5070,8 +5372,14 @@ static void __init apq8064_gpio_keys_init(void)
 	pm8xxx_gpio_config(GPIO_KEY_BACK, &param);
 }
 
+static void __init nfc_gpio_rev_init(void)
+{
+	if (system_rev < BOARD_REV14)
+		bcm2079x_i2c_pdata.wake_gpio = GPIO_NFC_FIRMWARE;
+}
 static void __init samsung_jf_init(void)
 {
+	int ret = -1;
 #ifdef CONFIG_PROC_AVC
 	sec_avc_log_init();
 #endif
@@ -5098,6 +5406,12 @@ static void __init samsung_jf_init(void)
 						ARRAY_SIZE(spi_board_info));
 #endif
 	}
+#if 1
+	apq8064_device_qup_spi_gsbi5.dev.platform_data =
+						&apq8064_qup_spi_gsbi5_pdata;
+    ret = spi_register_board_info(eeprom_spi_info,
+		ARRAY_SIZE(eeprom_spi_info));
+#endif
 	apq8064_init_fb();
 	apq8064_init_gpu();
 	platform_add_devices(apq8064_footswitch, apq8064_num_footswitch);
@@ -5108,7 +5422,19 @@ static void __init samsung_jf_init(void)
 #if defined(CONFIG_BATTERY_SAMSUNG)
 	msm8960_init_battery();
 #endif
+
+	if (machine_is_mpq8064_hrd() || machine_is_mpq8064_dtv()) {
+#ifdef CONFIG_SERIAL_MSM_HS
+		/* GSBI6(2) - UARTDM_RX */
+		mpq8064_gsbi6_uartdm_pdata.wakeup_irq = gpio_to_irq(15);
+		mpq8064_device_uartdm_gsbi6.dev.platform_data =
+					&mpq8064_gsbi6_uartdm_pdata;
+#endif
+		platform_device_register(&mpq8064_device_uartdm_gsbi6);
+	}
+
 #ifdef CONFIG_SENSORS_SSP
+	clear_ssp_gpio();
 	sensor_power_on_vdd(SNS_PWR_ON, SNS_PWR_ON);
 	initialize_ssp_gpio();
 #endif
@@ -5123,6 +5449,7 @@ static void __init samsung_jf_init(void)
 #endif
 #ifdef CONFIG_BCM2079X_NFC_I2C
 	bcm2079x_init();
+	nfc_gpio_rev_init();
 #endif
 
 #ifndef CONFIG_MACH_JF

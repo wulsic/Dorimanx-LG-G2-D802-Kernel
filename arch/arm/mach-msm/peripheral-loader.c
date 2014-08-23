@@ -143,7 +143,7 @@ static void pil_proxy_unvote(struct pil_device *pil, unsigned long timeout)
 		schedule_delayed_work(&pil->proxy, msecs_to_jiffies(timeout));
 }
 
-#define IOMAP_SIZE SZ_1M
+#define IOMAP_SIZE SZ_4M
 
 static int load_segment(const struct elf32_phdr *phdr, unsigned num,
 		struct pil_device *pil)
@@ -263,6 +263,7 @@ static int load_image(struct pil_device *pil)
 	if (ret) {
 		dev_err(&pil->dev, "%s: Failed to locate %s\n",
 				pil->desc->name, fw_name);
+
 		goto out;
 	}
 

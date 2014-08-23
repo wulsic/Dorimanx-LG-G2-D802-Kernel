@@ -379,7 +379,7 @@ static void usb_wwan_indat_callback(struct urb *urb)
 		list_add_tail(&urb->urb_list, &portdata->in_urb_list);
 		spin_unlock_irqrestore(&portdata->in_lock, flags);
 
-		schedule_work(&portdata->in_work);
+		queue_work(system_nrt_wq, &portdata->in_work);
 
 		return;
 	}
@@ -498,7 +498,7 @@ void usb_wwan_unthrottle(struct tty_struct *tty)
 	port->throttle_req = false;
 	port->throttled = false;
 
-	schedule_work(&portdata->in_work);
+	queue_work(system_nrt_wq, &portdata->in_work);
 }
 EXPORT_SYMBOL(usb_wwan_unthrottle);
 
@@ -796,13 +796,17 @@ EXPORT_SYMBOL(usb_wwan_release);
 int usb_wwan_suspend(struct usb_serial *serial, pm_message_t message)
 {
 	struct usb_wwan_intf_private *intfdata = serial->private;
+	int b = 0;
 
 	dbg("%s entered", __func__);
 
 	spin_lock_irq(&intfdata->susp_lock);
 	if (PMSG_IS_AUTO(message)) {
-		if (intfdata->in_flight) {
-			spin_unlock_irq(&intfdata->susp_lock);
+		spin_lock_irq(&intfdata->susp_lock);
+		b = intfdata->in_flight;
+		spin_unlock_irq(&intfdata->susp_lock);
+
+		if (b || pm_runtime_autosuspend_expiration(&serial->dev->dev)) {
 			return -EBUSY;
 		}
 	}
@@ -851,7 +855,7 @@ int usb_wwan_resume(struct usb_serial *serial)
 	struct usb_wwan_intf_private *intfdata = serial->private;
 	struct usb_wwan_port_private *portdata;
 	struct urb *urb;
-	int err;
+	int err = 0;
 	int err_count = 0;
 
 	dbg("%s entered", __func__);
@@ -897,16 +901,16 @@ int usb_wwan_resume(struct usb_serial *serial)
 				    __func__, err, j, urb, i);
 				usb_unanchor_urb(urb);
 				intfdata->suspended = 1;
-				err_count++;
+				spin_unlock_irq(&intfdata->susp_lock);
+				goto err_out;
 			}
 		}
 	}
+	intfdata->suspended = 0;
 	spin_unlock_irq(&intfdata->susp_lock);
 
-	if (err_count)
-		return -EIO;
-
-	return 0;
+err_out:
+	return err;
 }
 EXPORT_SYMBOL(usb_wwan_resume);
 #endif

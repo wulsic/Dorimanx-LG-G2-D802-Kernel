@@ -235,3 +235,4 @@ config USB_STORAGE_DETECT
 	depends on USB
 	help
  	  This is samsung patch
+

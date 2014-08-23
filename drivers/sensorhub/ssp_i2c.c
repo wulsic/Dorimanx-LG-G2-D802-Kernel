@@ -634,5 +634,5 @@ int select_irq_msg(struct ssp_data *data)
 }
 
 MODULE_AUTHOR("Alucard@24");
-MODULE_DESCRIPTION("'gps_status'");
+MODULE_DESCRIPTION("'gps and oncall frequency limitter'");
 MODULE_LICENSE("GPL");

@@ -1301,7 +1301,7 @@ static int __init qcache_init(void)
 	ret = sysfs_create_group(mm_kobj, &qcache_attr_group);
 	if (ret) {
 		pr_err("qcache: can't create sysfs\n");
-		return ret;
+		goto out;
 	}
 #endif /* CONFIG_SYSFS */
 
