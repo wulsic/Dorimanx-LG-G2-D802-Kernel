@@ -160,7 +160,6 @@ void inet_sock_destruct(struct sock *sk)
 	}
 	if (!sock_flag(sk, SOCK_DEAD)) {
 		pr_err("Attempt to release alive inet socket %p\n", sk);
-		dump_stack();
 		return;
 	}
 
@@ -1565,7 +1564,7 @@ static const struct net_protocol udp_protocol = {
 
 static const struct net_protocol icmp_protocol = {
 	.handler =	icmp_rcv,
-	.err_handler =	ping_err,
+	.err_handler =	ping_v4_err,
 	.no_policy =	1,
 	.netns_ok =	1,
 };

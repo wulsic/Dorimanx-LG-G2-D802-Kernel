@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: wl_android.c 429125 2013-10-11 10:43:53Z $
+ * $Id: wl_android.c 432013 2013-10-25 08:48:11Z $
  */
 
 #include <linux/module.h>
@@ -37,7 +37,9 @@
 #include <dhd_dbg.h>
 #include <dngl_stats.h>
 #include <dhd.h>
+#ifdef SUPPORT_AIBSS
 #include <proto/bcmip.h>
+#endif /* SUPPORT_AIBSS */
 #ifdef PNO_SUPPORT
 #include <dhd_pno.h>
 #endif
@@ -88,7 +90,6 @@
 #define CMD_SET_AP_WPS_P2P_IE 		"SET_AP_WPS_P2P_IE"
 #define CMD_SETROAMMODE 	"SETROAMMODE"
 #define CMD_SETIBSSBEACONOUIDATA	"SETIBSSBEACONOUIDATA"
-#define CMD_SETIBSSROUTETABLE		"SETIBSSROUTETABLE"
 #define CMD_MIRACAST		"MIRACAST"
 
 #if defined(WL_SUPPORT_AUTO_CHANNEL)
@@ -232,10 +233,16 @@ typedef struct android_wifi_af_params {
 #define CMD_SET_RMC_TXRATE			"SETRMCTXRATE"
 #define CMD_SET_RMC_ACTPERIOD		"SETRMCACTIONPERIOD"
 #define CMD_SET_RMC_IDLEPERIOD		"SETRMCIDLEPERIOD"
+
 #endif /* CUSTOMER_HW4 */
-#if defined(CUSTOMER_HW4) && defined(SUPPORT_AIBSS)
+
+#ifdef SUPPORT_AIBSS
 #define CMD_SETIBSSTXFAILEVENT		"SETIBSSTXFAILEVENT"
-#endif /* CUSTOMER_HW4 && SUPPORT_AIBSS */
+#define CMD_GET_IBSS_PEER_INFO		"GETIBSSPEERINFO"
+#define CMD_GET_IBSS_PEER_INFO_ALL	"GETIBSSPEERINFOALL"
+#define CMD_SETIBSSROUTETABLE		"SETIBSSROUTETABLE"
+#endif /* SUPPORT_AIBSS */
+
 
 /* miracast related definition */
 #define MIRACAST_MODE_OFF	0
@@ -354,6 +361,7 @@ extern int set_roamscan_channel_list(struct net_device *dev, unsigned char n,
 extern int bcm_bt_lock(int cookie);
 extern void bcm_bt_unlock(int cookie);
 static int lock_cookie_wifi = 'W' | 'i'<<8 | 'F'<<16 | 'i'<<24;	/* cookie is "WiFi" */
+static bool is4335_revb0 = true;
 #endif /* ENABLE_4335BT_WAR */
 
 extern bool ap_fw_loaded;
@@ -2248,7 +2256,7 @@ resume:
 	return ret;
 }
 
-#if defined(CUSTOMER_HW4) && defined(SUPPORT_AIBSS)
+#ifdef SUPPORT_AIBSS
 #define NETLINK_OXYGEN     30
 #define AIBSS_BEACON_TIMEOUT	10
 
@@ -2261,13 +2269,26 @@ static void wl_netlink_recv(struct sk_buff *skb)
 
 static int wl_netlink_init(void)
 {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0))
+	struct netlink_kernel_cfg cfg = {
+		.input	= wl_netlink_recv,
+	};
+#endif
+
 	if (nl_sk != NULL) {
 		WL_ERR(("nl_sk already exist\n"));
 		return BCME_ERROR;
 	}
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0))
 	nl_sk = netlink_kernel_create(&init_net, NETLINK_OXYGEN,
 		0, wl_netlink_recv, NULL, THIS_MODULE);
+#elif (LINUX_VERSION_CODE < KERNEL_VERSION(3, 7, 0))
+	nl_sk = netlink_kernel_create(&init_net, NETLINK_OXYGEN, THIS_MODULE, &cfg);
+#else
+	nl_sk = netlink_kernel_create(&init_net, NETLINK_OXYGEN, &cfg);
+#endif
+
 	if (nl_sk == NULL) {
 		WL_ERR(("nl_sk is not ready\n"));
 		return BCME_ERROR;
@@ -2303,7 +2324,6 @@ wl_netlink_send_msg(int pid, int seq, void *data, int size)
 	}
 
 	nlh = NLMSG_PUT(skb, 0, 0, 0, size);
-	memset(nlh, 0, size);
 	memcpy(NLMSG_DATA(nlh), data, size);
 	nlh->nlmsg_seq = seq;
 
@@ -2320,7 +2340,7 @@ static int wl_android_set_ibss_txfail_event(struct net_device *dev, char *comman
 	int err = 0;
 	int retry = 0;
 	int pid = 0;
-	aibss_txfail_config_t txfail_config;
+	aibss_txfail_config_t txfail_config = {0, 0, 0, 0};
 	char smbuf[WLC_IOCTL_SMLEN];
 
 	if (sscanf(command, CMD_SETIBSSTXFAILEVENT " %d %d", &retry, &pid) <= 0) {
@@ -2345,8 +2365,92 @@ static int wl_android_set_ibss_txfail_event(struct net_device *dev, char *comman
 
 	return ((err == 0)?total_len:err);
 }
-#endif /* CUSTOMER_HW4 && SUPPORT_AIBSS */
 
+static int wl_android_get_ibss_peer_info(struct net_device *dev, char *command,
+	int total_len, bool bAll)
+{
+	int error;
+	int bytes_written = 0;
+	void *buf = NULL;
+	bss_peer_list_info_t peer_list_info;
+	bss_peer_info_t *peer_info;
+	int i;
+	bool found = false;
+	struct ether_addr mac_ea;
+
+	WL_DBG(("get ibss peer info(%s)\n", bAll?"true":"false"));
+
+	if (!bAll) {
+		if (sscanf (command, "GETIBSSPEERINFO %02x:%02x:%02x:%02x:%02x:%02x",
+			(unsigned int *)&mac_ea.octet[0], (unsigned int *)&mac_ea.octet[1],
+			(unsigned int *)&mac_ea.octet[2], (unsigned int *)&mac_ea.octet[3],
+			(unsigned int *)&mac_ea.octet[4], (unsigned int *)&mac_ea.octet[5]) != 6) {
+			WL_DBG(("invalid MAC address\n"));
+			return -1;
+		}
+	}
+
+	if ((buf = kmalloc(WLC_IOCTL_MAXLEN, GFP_KERNEL)) == NULL) {
+		WL_ERR(("kmalloc failed\n"));
+		return -1;
+	}
+
+	error = wldev_iovar_getbuf(dev, "bss_peer_info", NULL, 0, buf, WLC_IOCTL_MAXLEN, NULL);
+	if (unlikely(error)) {
+		WL_ERR(("could not get ibss peer info (%d)\n", error));
+		kfree(buf);
+		return -1;
+	}
+
+	memcpy(&peer_list_info, buf, sizeof(peer_list_info));
+	peer_list_info.version = htod16(peer_list_info.version);
+	peer_list_info.bss_peer_info_len = htod16(peer_list_info.bss_peer_info_len);
+	peer_list_info.count = htod32(peer_list_info.count);
+
+	WL_DBG(("ver:%d, len:%d, count:%d\n", peer_list_info.version,
+		peer_list_info.bss_peer_info_len, peer_list_info.count));
+
+	if (peer_list_info.count > 0) {
+		if (bAll)
+			bytes_written += sprintf(&command[bytes_written], "%u ",
+				peer_list_info.count);
+
+		peer_info = (bss_peer_info_t *) ((void *)buf + BSS_PEER_LIST_INFO_FIXED_LEN);
+
+		for (i = 0; i < peer_list_info.count; i++) {
+
+			WL_DBG(("index:%d rssi:%d, tx:%u, rx:%u\n", i, peer_info->rssi, peer_info->tx_rate,
+				peer_info->rx_rate));
+
+			if (!bAll &&
+				memcmp(&mac_ea, &peer_info->ea, sizeof(struct ether_addr)) == 0) {
+				found = true;
+			}
+
+			if (bAll || found) {
+				bytes_written += sprintf(&command[bytes_written], MACF,
+					ETHER_TO_MACF(peer_info->ea));
+				bytes_written += sprintf(&command[bytes_written], " %u %d ",
+					peer_info->tx_rate/1000, peer_info->rssi);
+			}
+
+			if (found)
+				break;
+
+			peer_info = (bss_peer_info_t *)((void *)peer_info + sizeof(bss_peer_info_t));
+		}
+	}
+	else {
+		WL_ERR(("could not get ibss peer info : no item\n"));
+	}
+	bytes_written += sprintf(&command[bytes_written], "%s", "\0");
+
+	WL_DBG(("command(%u):%s\n", total_len, command));
+	WL_DBG(("bytes_written:%d\n", bytes_written));
+
+	kfree(buf);
+	return bytes_written;
+}
 
 int wl_android_set_ibss_routetable(struct net_device *dev, char *command, int total_len)
 {
@@ -2437,6 +2541,7 @@ exit:
 	return err;
 
 }
+#endif /* SUPPORT_AIBSS */
 
 int wl_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 {
@@ -2875,15 +2980,23 @@ int wl_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 		strlen(CMD_SETIBSSBEACONOUIDATA)) == 0)
 		bytes_written = wl_android_set_ibss_beacon_ouidata(net, command,
 			priv_cmd.total_len);
+#ifdef SUPPORT_AIBSS
 	else if (strnicmp(command, CMD_SETIBSSROUTETABLE,
 		strlen(CMD_SETIBSSROUTETABLE)) == 0)
 		bytes_written = wl_android_set_ibss_routetable(net, command,
 			priv_cmd.total_len);
-#if defined(CUSTOMER_HW4) && defined(SUPPORT_AIBSS)
 	else if (strnicmp(command, CMD_SETIBSSTXFAILEVENT,
 		strlen(CMD_SETIBSSTXFAILEVENT)) == 0)
 		bytes_written = wl_android_set_ibss_txfail_event(net, command, priv_cmd.total_len);
-#endif /* CUSTOMER_HW4 && SUPPORT_AIBSS */
+	else if (strnicmp(command, CMD_GET_IBSS_PEER_INFO_ALL,
+		strlen(CMD_GET_IBSS_PEER_INFO_ALL)) == 0)
+		bytes_written = wl_android_get_ibss_peer_info(net, command, priv_cmd.total_len,
+			TRUE);
+	else if (strnicmp(command, CMD_GET_IBSS_PEER_INFO,
+		strlen(CMD_GET_IBSS_PEER_INFO)) == 0)
+		bytes_written = wl_android_get_ibss_peer_info(net, command, priv_cmd.total_len,
+			FALSE);
+#endif /* SUPPORT_AIBSS */
 	else {
 		DHD_ERROR(("Unknown PRIVATE command %s - ignored\n", command));
 		snprintf(command, 3, "OK");
@@ -2918,9 +3031,38 @@ exit:
 	return ret;
 }
 
+#ifdef ENABLE_4335BT_WAR
+void check_bcm4335_rev(void)
+{
+	int ret = -1; 
+	struct file *fp = NULL;
+	char *filepath = "/data/.rev";
+	char chip_rev[10]={0,};
+
+	printk("check BCM4335, check_bcm4335_rev \n");
+	fp = filp_open(filepath, O_RDONLY, 0);
+	if (IS_ERR(fp)) {
+		printk("/data/.rev file open error\n");
+		is4335_revb0 = true;
+		
+	} else {
+		printk("/data/.rev file Found\n");
+		ret = kernel_read(fp, 0, (char *)chip_rev, 9);
+		if(ret != -1 && NULL != strstr(chip_rev,"BCM4335B0")) {
+			printk("Found BCM4335B0\n");
+			is4335_revb0 = true;
+		} else {
+			is4335_revb0 = false;
+		}
+		filp_close(fp, NULL);
+	}
+}
+#endif
+
 int wl_android_init(void)
 {
 	int ret = 0;
+
 
 #ifdef ENABLE_INSMOD_NO_FW_LOAD
 	dhd_download_fw_on_driverload = FALSE;
@@ -2932,12 +3074,16 @@ int wl_android_init(void)
 	}
 #endif
 
+#ifdef ENABLE_4335BT_WAR
+	check_bcm4335_rev();
+#endif
+
 #ifdef WL_GENL
 	wl_genl_init();
 #endif
-#if defined(CUSTOMER_HW4) && defined(SUPPORT_AIBSS)
+#ifdef SUPPORT_AIBSS
 	wl_netlink_init();
-#endif /* CUSTOMER_HW4 && SUPPORT_AIBSS */
+#endif /* SUPPORT_AIBSS */
 
 	return ret;
 }
@@ -2949,9 +3095,9 @@ int wl_android_exit(void)
 #ifdef WL_GENL
 	wl_genl_deinit();
 #endif /* WL_GENL */
-#if defined(CUSTOMER_HW4) && defined(SUPPORT_AIBSS)
+#ifdef SUPPORT_AIBSS
 	wl_netlink_deinit();
-#endif /* CUSTOMER_HW4 && SUPPORT_AIBSS */
+#endif /* SUPPORT_AIBSS */
 
 	return ret;
 }
@@ -3284,6 +3430,7 @@ int wifi_get_irq_number(unsigned long *irq_flags_ptr)
 #endif
 }
 
+
 int wifi_set_power(int on, unsigned long msec)
 {
 	int ret = 0;
@@ -3303,7 +3450,12 @@ int wifi_set_power(int on, unsigned long msec)
 			bcm_bt_unlock(lock_cookie_wifi);
 		}
 #endif /* ENABLE_4335BT_WAR */
+
+#ifdef ENABLE_4335BT_WAR
+		ret = wifi_control_data->set_power(on,is4335_revb0);
+#else 
 		ret = wifi_control_data->set_power(on);
+#endif
 	}
 
 	if (wifi_regulator && !on)
