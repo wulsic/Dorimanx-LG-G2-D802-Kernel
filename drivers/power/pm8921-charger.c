@@ -1443,10 +1443,14 @@ static int pm_power_get_property_mains(struct power_supply *psy,
 		}
 
 		/* USB with max current greater than 500 mA connected */
+#ifdef CONFIG_FORCE_FAST_CHARGE
 		if (force_fast_charge == 1)
 			USB_WALL_THRESHOLD_MA = USB_FASTCHG_LOAD;
 		else
 			USB_WALL_THRESHOLD_MA = 500;
+#else
+		USB_WALL_THRESHOLD_MA = 500;
+#endif
 		pr_alert("PM8921-1-%d-%d",usb_target_ma,USB_WALL_THRESHOLD_MA);
 		type = the_chip->usb_type;
 		if (type == POWER_SUPPLY_TYPE_USB_DCP ||
@@ -1525,10 +1529,14 @@ static int pm_power_set_property_usb(struct power_supply *psy,
 	if (!the_chip)
 		return -EINVAL;
 
+#ifdef CONFIG_FORCE_FAST_CHARGE
 	if (force_fast_charge == 1)
 		USB_WALL_THRESHOLD_MA = USB_FASTCHG_LOAD;
 	else
 		USB_WALL_THRESHOLD_MA = 500;
+#else
+	USB_WALL_THRESHOLD_MA = 500;
+#endif
 	pr_alert("PM8921-2-%d", USB_WALL_THRESHOLD_MA);
 
 	switch (psp) {
@@ -1574,10 +1582,14 @@ static int pm_power_get_property_usb(struct power_supply *psy,
 	if (!the_chip)
 		return -EINVAL;
 
+#ifdef CONFIG_FORCE_FAST_CHARGE
 	if (force_fast_charge == 1)
 		USB_WALL_THRESHOLD_MA = USB_FASTCHG_LOAD;
 	else
 		USB_WALL_THRESHOLD_MA = 500;
+#else
+	USB_WALL_THRESHOLD_MA = 500;
+#endif
 	pr_alert("PM8921-3-%d",USB_WALL_THRESHOLD_MA);
 
 	switch (psp) {
@@ -2031,6 +2043,7 @@ void pm8921_charger_vbus_draw(unsigned int mA)
 
 	pr_debug("Enter charge=%d\n", mA);
 
+#ifdef CONFIG_FORCE_FAST_CHARGE
 	if (force_fast_charge == 1)
 	{
 		USB_WALL_THRESHOLD_MA = USB_FASTCHG_LOAD;
@@ -2038,6 +2051,9 @@ void pm8921_charger_vbus_draw(unsigned int mA)
 	}
 	else
 		USB_WALL_THRESHOLD_MA = 500;
+#else
+	USB_WALL_THRESHOLD_MA = 500;
+#endif
 	pr_alert("PM8921-4-%d-%d",USB_WALL_THRESHOLD_MA, mA);
 
 	/*
@@ -2621,10 +2637,14 @@ static void vin_collapse_check_worker(struct work_struct *work)
 	struct pm8921_chg_chip *chip = container_of(dwork,
 			struct pm8921_chg_chip, vin_collapse_check_work);
 
+#ifdef CONFIG_FORCE_FAST_CHARGE
 	if (force_fast_charge == 1)
 		USB_WALL_THRESHOLD_MA = USB_FASTCHG_LOAD;
 	else
 		USB_WALL_THRESHOLD_MA = 500;
+#else
+	USB_WALL_THRESHOLD_MA = 500;
+#endif
 	pr_alert("PM8921-5-%d", USB_WALL_THRESHOLD_MA);
 
 	/*
@@ -2842,10 +2862,14 @@ static void unplug_check_worker(struct work_struct *work)
 	int chg_gone = 0;
 	bool ramp = false;
 
+#ifdef CONFIG_FORCE_FAST_CHARGE
 	if (force_fast_charge == 1)
 		USB_WALL_THRESHOLD_MA = USB_FASTCHG_LOAD;
 	else
 		USB_WALL_THRESHOLD_MA = 500;
+#else
+	USB_WALL_THRESHOLD_MA = 500;
+#endif
 	pr_alert("PM8921-6-%d", USB_WALL_THRESHOLD_MA);
 
 	rc = pm8xxx_readb(chip->dev->parent, PBL_ACCESS1, &active_path);
