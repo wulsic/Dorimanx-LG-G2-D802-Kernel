@@ -2567,11 +2567,10 @@ struct device *bamDmux_pkt_dev;
 static ssize_t show_waketime(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	const size_t bufsz = sizeof(buf);
 	if (!bamDmux_pkt_dev)
 		return 0;
 
-	return snprintf(buf, bufsz, "%u\n", wakelock_timeout);
+	return snprintf(buf, sizeof(*buf), "%u\n", wakelock_timeout);
 }
 
 static ssize_t store_waketime(struct device *dev,
