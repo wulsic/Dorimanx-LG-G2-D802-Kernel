@@ -582,7 +582,6 @@ static int qdss_bind_config(struct usb_configuration *c, const char *name)
 	}
 
 	spin_lock_irqsave(&d_lock, flags);
-	chnamesz = sizeof(ch->name);
 	list_for_each_entry(ch, &usb_qdss_ch_list, list) {
 		if (!strncmp(name, ch->name, (int)sizeof(ch->name))) {
 			found = 1;
