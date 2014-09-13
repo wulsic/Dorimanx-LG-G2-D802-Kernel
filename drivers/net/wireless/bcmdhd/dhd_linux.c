@@ -906,8 +906,6 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 	uint32 allmulti;
 	uint i;
 #endif /* PASS_ALL_MCAST_PKTS && CUSTOMER_HW4 */
-	uint nd_ra_filter = 0;
-	int ret = 0;
 
 	if (!dhd)
 		return -ENODEV;
@@ -928,14 +926,6 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 				dhd_wl_ioctl_cmd(dhd, WLC_SET_PM, (char *)&power_mode,
 				                 sizeof(power_mode), TRUE, 0);
 #endif /* SUPPORT_PM2_ONLY */
-				if (FW_SUPPORTED(dhd, ndoe)) {
-					/* enable IPv6 RA filter in  firmware during suspend */
-					nd_ra_filter = 1;
-					bcm_mkiovar("nd_ra_filter_enable", (char *)&nd_ra_filter, 4,
-							iovbuf, sizeof(iovbuf));
-					if ((ret = dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0)) < 0)
-						DHD_ERROR(("failed to set nd_ra_filter (%d)\n", ret));
-				}
 
 				/* Enable packet filter, only allow unicast packet to send up */
 				dhd_enable_packet_filter(1, dhd);
@@ -968,14 +958,6 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 					iovbuf, sizeof(iovbuf));
 				dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
 #endif /* ENABLE_FW_ROAM_SUSPEND */
-				if (FW_SUPPORTED(dhd, ndoe)) {
-					/* disable IPv6 RA filter in  firmware during suspend */
-					nd_ra_filter = 0;
-					bcm_mkiovar("nd_ra_filter_enable", (char *)&nd_ra_filter, 4,
-							iovbuf, sizeof(iovbuf));
-					if ((ret = dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0)) < 0)
-						DHD_ERROR(("failed to set nd_ra_filter (%d)\n", ret));
-				}
 #if defined(CUSTOMER_HW4) && defined(ENABLE_BCN_LI_BCN_WAKEUP)
 				bcn_li_bcn = 0;
 				bcm_mkiovar("bcn_li_bcn", (char *)&bcn_li_bcn,
@@ -6651,10 +6633,10 @@ int dhd_os_wake_lock_timeout(dhd_pub_t *pub)
 #ifdef CONFIG_HAS_WAKELOCK
 		if (dhd->wakelock_rx_timeout_enable)
 			wake_lock_timeout(&dhd->wl_rxwake,
-				msecs_to_jiffies(dhd->wakelock_rx_timeout_enable));
+				msecs_to_jiffies(dhd->wakelock_rx_timeout_enable)/2);
 		if (dhd->wakelock_ctrl_timeout_enable)
 			wake_lock_timeout(&dhd->wl_ctrlwake,
-				msecs_to_jiffies(dhd->wakelock_ctrl_timeout_enable));
+				msecs_to_jiffies(dhd->wakelock_ctrl_timeout_enable)/2);
 #endif
 		dhd->wakelock_rx_timeout_enable = 0;
 		dhd->wakelock_ctrl_timeout_enable = 0;

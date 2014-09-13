@@ -796,24 +796,20 @@ EXPORT_SYMBOL(usb_wwan_release);
 int usb_wwan_suspend(struct usb_serial *serial, pm_message_t message)
 {
 	struct usb_wwan_intf_private *intfdata = serial->private;
-	int b = 0;
 
 	dbg("%s entered", __func__);
 
 	spin_lock_irq(&intfdata->susp_lock);
 	if (PMSG_IS_AUTO(message)) {
-		spin_lock_irq(&intfdata->susp_lock);
-		b = intfdata->in_flight;
-		spin_unlock_irq(&intfdata->susp_lock);
 
-		if (b || pm_runtime_autosuspend_expiration(&serial->dev->dev)) {
+		if (intfdata->in_flight) {
+			spin_unlock_irq(&intfdata->susp_lock);
 			return -EBUSY;
 		}
 	}
 
 	intfdata->suspended = 1;
 	spin_unlock_irq(&intfdata->susp_lock);
-
 	stop_read_write_urbs(serial);
 
 	return 0;
@@ -901,16 +897,16 @@ int usb_wwan_resume(struct usb_serial *serial)
 				    __func__, err, j, urb, i);
 				usb_unanchor_urb(urb);
 				intfdata->suspended = 1;
-				spin_unlock_irq(&intfdata->susp_lock);
-				goto err_out;
+				err_count++;
 			}
 		}
 	}
-	intfdata->suspended = 0;
-	spin_unlock_irq(&intfdata->susp_lock);
 
-err_out:
-	return err;
+
+	if (err_count)
+		return -EIO;
+
+	return 0;
 }
 EXPORT_SYMBOL(usb_wwan_resume);
 #endif
