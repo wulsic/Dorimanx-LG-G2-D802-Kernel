@@ -71,7 +71,7 @@ static atomic_t msm_rtb_idx;
 #endif
 
 struct msm_rtb_state msm_rtb = {
-	.filter = 1 << LOGK_READL | 1 << LOGK_WRITEL,
+	.filter = 0,
 	.enabled = 1,
 };
 
@@ -286,7 +286,7 @@ int msm_rtb_probe(struct platform_device *pdev)
 	atomic_set(&msm_rtb_idx, 0);
 	msm_rtb.step_size = 1;
 #endif
-
+	msm_rtb.filter = 1 << LOGK_READL | 1 << LOGK_WRITEL;
 	atomic_notifier_chain_register(&panic_notifier_list,
 						&msm_rtb_panic_blk);
 	msm_rtb.initialized = 1;
