@@ -62,7 +62,7 @@ static struct msm_thermal_data msm_thermal_info_local = {
 	.freq_step = 2,
 	.freq_control_mask = 0xf,
 	.core_limit_temp_degC = 80,
-	.core_temp_hysteresis_degC = 5,
+	.core_temp_hysteresis_degC = 10,
 	.core_control_mask = 0xe,
 };
 
@@ -180,7 +180,7 @@ static void update_cpu_freq(int cpu)
 static int check_sensor_id(int sensor_id)
 {
 	int i = 0;
-	bool hw_id_found = false;
+	bool hw_id_found;
 	int ret = 0;
 
 	for (i = 0; i < max_tsens_num; i++) {
