@@ -58,7 +58,7 @@ static struct hotplug_tuners {
 	unsigned int hotplug_suspend;
 } hotplug_tuners_ins = {
 	.hotplug_sampling_rate = 60,
-	.hotplug_enable = 0,
+	.hotplug_enable = 1,
 	.min_cpus_online = 1,
 	.maxcoreslimit = NR_CPUS,
 	.maxcoreslimit_sleep = 1,
