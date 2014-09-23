@@ -46,7 +46,6 @@ struct cpu_load_data {
 #else
 	u64 prev_cpu_idle;
 	u64 prev_cpu_wall;
-	u64 prev_cpu_iowait;
 #endif
 	unsigned int avg_load_maxfreq;
 	unsigned int samples;
@@ -61,17 +60,6 @@ static DEFINE_PER_CPU(struct cpu_load_data, cpuload);
 
 #ifndef CONFIG_MSM_RUN_QUEUE_STATS_USE_CPU_UTIL
 static bool hp_io_is_busy = 0;
-
-static inline u64 get_cpu_iowait_time(unsigned int cpu,
-							u64 *wall)
-{
-	u64 iowait_time = get_cpu_iowait_time_us(cpu, wall);
-
-	if (iowait_time == -1ULL)
-		return 0;
-
-	return iowait_time;
-}
 #endif
 
 static int update_average_load(unsigned int freq, unsigned int cpu)
@@ -81,8 +69,8 @@ static int update_average_load(unsigned int freq, unsigned int cpu)
 	u64 cur_wall_time;
 	unsigned int wall_time;
 #else
-	u64 cur_wall_time, cur_idle_time, cur_iowait_time;
-	unsigned int idle_time, wall_time, iowait_time;
+	u64 cur_wall_time, cur_idle_time;
+	unsigned int idle_time, wall_time;
 #endif
 	unsigned int cur_load, load_at_max_freq;
 	struct cpu_load_data *pcpu = &per_cpu(cpuload, cpu);
@@ -99,21 +87,12 @@ static int update_average_load(unsigned int freq, unsigned int cpu)
 	cur_load = cpufreq_quick_get_util(cpu);
 #else
 	cur_idle_time = get_cpu_idle_time(cpu, &cur_wall_time, hp_io_is_busy);
-	cur_iowait_time = get_cpu_iowait_time(cpu, &cur_wall_time);
 
 	wall_time = (unsigned int) (cur_wall_time - pcpu->prev_cpu_wall);
 	pcpu->prev_cpu_wall = cur_wall_time;
 
 	idle_time = (unsigned int) (cur_idle_time - pcpu->prev_cpu_idle);
 	pcpu->prev_cpu_idle = cur_idle_time;
-
-	iowait_time = (unsigned int) (cur_iowait_time - pcpu->prev_cpu_iowait);
-	pcpu->prev_cpu_iowait = cur_iowait_time;
-
-#ifndef CONFIG_MSM_RUN_QUEUE_STATS_BE_CONSERVATIVE
-	if (idle_time >= iowait_time)
-		idle_time -= iowait_time;
-#endif
 
 	if (unlikely(!wall_time || wall_time < idle_time))
 		return 0;
@@ -146,7 +125,6 @@ static int update_average_load(unsigned int freq, unsigned int cpu)
 }
 
 #ifdef CONFIG_MSM_RUN_QUEUE_STATS_BE_CONSERVATIVE
-
 static unsigned int report_load_at_max_freq(void)
 {
 	int cpu;
@@ -311,7 +289,6 @@ static ssize_t store_hotplug_enable(struct kobject *kobj,
 		for_each_possible_cpu(cpu) {
 			struct cpu_load_data *pcpu = &per_cpu(cpuload, cpu);
 			pcpu->prev_cpu_idle = get_cpu_idle_time(cpu, &pcpu->prev_cpu_wall, hp_io_is_busy);
-			pcpu->prev_cpu_iowait = get_cpu_iowait_time(cpu, &pcpu->prev_cpu_wall);
 		}
 #endif
 		rq_info.hotplug_disabled = 0;
@@ -551,7 +528,6 @@ static int __init msm_rq_stats_init(void)
 		pcpu->prev_cpu_wall = ktime_to_us(ktime_get());
 #else
 		pcpu->prev_cpu_idle = get_cpu_idle_time(i, &pcpu->prev_cpu_wall, hp_io_is_busy);
-		pcpu->prev_cpu_iowait = get_cpu_iowait_time(i, &pcpu->prev_cpu_wall);
 #endif
 		cpumask_copy(pcpu->related_cpus, cpu_policy.cpus);
 	}
