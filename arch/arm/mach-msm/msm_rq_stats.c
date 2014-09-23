@@ -292,6 +292,9 @@ static ssize_t store_hotplug_enable(struct kobject *kobj,
 	int ret;
 	unsigned int val;
 	unsigned long flags = 0;
+#ifndef CONFIG_MSM_RUN_QUEUE_STATS_USE_CPU_UTIL
+	unsigned int cpu = 0;
+#endif
 
 	spin_lock_irqsave(&rq_lock, flags);
 	ret = sscanf(buf, "%u", &val);
@@ -303,11 +306,19 @@ static ssize_t store_hotplug_enable(struct kobject *kobj,
 		return count;
 	}
 
-	rq_info.hotplug_enabled = val;
-	if (rq_info.hotplug_enabled)
+	if (val) {
+#ifndef CONFIG_MSM_RUN_QUEUE_STATS_USE_CPU_UTIL
+		for_each_possible_cpu(cpu) {
+			struct cpu_load_data *pcpu = &per_cpu(cpuload, cpu);
+			pcpu->prev_cpu_idle = get_cpu_idle_time(cpu, &pcpu->prev_cpu_wall, hp_io_is_busy);
+			pcpu->prev_cpu_iowait = get_cpu_iowait_time(cpu, &pcpu->prev_cpu_wall);
+		}
+#endif
 		rq_info.hotplug_disabled = 0;
-	else
+	} else {
 		rq_info.hotplug_disabled = 1;
+	}
+	rq_info.hotplug_enabled = val;
 
 	spin_unlock_irqrestore(&rq_lock, flags);
 
