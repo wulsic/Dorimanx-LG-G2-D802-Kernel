@@ -549,6 +549,9 @@ static int __init msm_rq_stats_init(void)
 			pcpu->cur_freq = cpu_policy.cur;
 #ifdef CONFIG_MSM_RUN_QUEUE_STATS_USE_CPU_UTIL
 		pcpu->prev_cpu_wall = ktime_to_us(ktime_get());
+#else
+		pcpu->prev_cpu_idle = get_cpu_idle_time(i, &pcpu->prev_cpu_wall, hp_io_is_busy);
+		pcpu->prev_cpu_iowait = get_cpu_iowait_time(i, &pcpu->prev_cpu_wall);
 #endif
 		cpumask_copy(pcpu->related_cpus, cpu_policy.cpus);
 	}
