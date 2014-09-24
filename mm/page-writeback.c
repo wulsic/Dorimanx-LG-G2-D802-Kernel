@@ -38,7 +38,7 @@
 #include <linux/timer.h>
 #include <linux/sched/rt.h>
 #include <trace/events/writeback.h>
-#include <linux/earlysuspend.h>
+#include <linux/powersuspend.h>
 
 #include "internal.h"
 
@@ -1644,20 +1644,19 @@ static struct notifier_block __cpuinitdata ratelimit_nb = {
 	.next		= NULL,
 };
 
-static void dirty_early_suspend(struct early_suspend *handler)
+static void dirty_early_suspend(struct power_suspend *handler)
 {
 	dirty_writeback_interval = suspend_dirty_writeback_interval;
 	dirty_expire_interval = suspend_dirty_expire_interval;
 }
 
-static void dirty_late_resume(struct early_suspend *handler)
+static void dirty_late_resume(struct power_suspend *handler)
 {
 	dirty_writeback_interval = resume_dirty_writeback_interval;
 	dirty_expire_interval = resume_dirty_expire_interval;
 }
 
-static struct early_suspend dirty_suspend = {
-	.level = EARLY_SUSPEND_LEVEL_DISABLE_FB + 10,
+static struct power_suspend dirty_suspend = {
 	.suspend = dirty_early_suspend,
 	.resume = dirty_late_resume,
 };
@@ -1691,7 +1690,7 @@ void __init page_writeback_init(void)
 	sleep_dirty_expire_interval = suspend_dirty_expire_interval =
 		DEFAULT_SUSPEND_DIRTY_EXPIRE_INTERVAL;
 
-	register_early_suspend(&dirty_suspend);
+	register_power_suspend(&dirty_suspend);
 
 	writeback_set_ratelimit();
 	register_cpu_notifier(&ratelimit_nb);

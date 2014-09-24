@@ -3761,6 +3761,7 @@ int synaptics_rmi4_new_function(enum exp_fn fn_type,
 	return 0;
 }
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
 static void synaptics_init_power_on(struct work_struct *work)
 {
 	struct synaptics_rmi4_data *rmi4_data =
@@ -3773,13 +3774,18 @@ static void synaptics_init_power_on(struct work_struct *work)
 					"%s: until lcd does not turn on.\n", __func__);
 			schedule_delayed_work(&rmi4_data->work_init_power_on,
 					msecs_to_jiffies(1000));
+#ifdef CONFIG_HAS_EARLYSUSPEND
 	} else {
 		synaptics_rmi4_late_resume(&rmi4_data->early_suspend);
+#endif
 	}
 #else
+#ifdef CONFIG_HAS_EARLYSUSPEND
 	synaptics_rmi4_late_resume(&rmi4_data->early_suspend);
 #endif
+#endif
 }
+#endif
 
  /**
  * synaptics_rmi4_probe()

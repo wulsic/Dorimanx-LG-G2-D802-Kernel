@@ -45,7 +45,7 @@
 #include <linux/swap.h>
 #include <linux/fs.h>
 
-#include <linux/earlysuspend.h>
+#include <linux/powersuspend.h>
 #include <trace/events/memkill.h>
 
 #ifdef CONFIG_HIGHMEM
@@ -560,7 +560,7 @@ static struct shrinker lowmem_shrinker = {
 	.seeks = DEFAULT_SEEKS * 16
 };
 
-static void low_mem_power_suspend(struct early_suspend *handler)
+static void low_mem_power_suspend(struct power_suspend *handler)
 {
 	if (lowmem_auto_oom && lowmem_minfree != lowmem_minfree_screen_off) {
 		memcpy(lowmem_minfree_screen_on, lowmem_minfree, sizeof(lowmem_minfree));
@@ -568,14 +568,13 @@ static void low_mem_power_suspend(struct early_suspend *handler)
 	}
 }
 
-static void low_mem_late_resume(struct early_suspend *handler)
+static void low_mem_late_resume(struct power_suspend *handler)
 {
 	if (lowmem_auto_oom && lowmem_minfree != lowmem_minfree_screen_off)
 		memcpy(lowmem_minfree, lowmem_minfree_screen_on, sizeof(lowmem_minfree_screen_on));
 }
 
-static struct early_suspend low_mem_suspend = {
-	.level = EARLY_SUSPEND_LEVEL_DISABLE_FB + 10,
+static struct power_suspend low_mem_suspend = {
 	.suspend = low_mem_power_suspend,
 	.resume = low_mem_late_resume,
 };
@@ -602,7 +601,7 @@ static struct notifier_block tsk_migration_nb = {
 static int __init lowmem_init(void)
 {
 	register_shrinker(&lowmem_shrinker);
-	register_early_suspend(&low_mem_suspend);
+	register_power_suspend(&low_mem_suspend);
 #ifdef CONFIG_ANDROID_BG_SCAN_MEM
 	raw_notifier_chain_register(&bgtsk_migration_notifier_head,
 					&tsk_migration_nb);
