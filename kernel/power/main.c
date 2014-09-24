@@ -340,12 +340,12 @@ static ssize_t state_show(struct kobject *kobj, struct kobj_attribute *attr,
 {
 	char *s = buf;
 #ifdef CONFIG_SUSPEND
-	suspend_state_t i;
+	int i;
 
-	for (i = PM_SUSPEND_MIN; i < PM_SUSPEND_MAX; i++)
-		if (valid_state(i))
-			s += sprintf(s,"%s ", pm_states[i].label);
-
+	for (i = 0; i < PM_SUSPEND_MAX; i++) {
+		if (pm_states[i] && valid_state(i))
+			s += sprintf(s,"%s ", pm_states[i]);
+	}
 #endif
 #ifdef CONFIG_HIBERNATION
 	s += sprintf(s, "%s\n", "disk");
@@ -366,7 +366,7 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 #else
 	suspend_state_t state = PM_SUSPEND_MIN;
 #endif
-	struct pm_sleep_state *s;
+	const char * const *s;
 #endif
 	char *p;
 	int len;
@@ -383,7 +383,7 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 
 #ifdef CONFIG_SUSPEND
 	for (s = &pm_states[state]; state < PM_SUSPEND_MAX; s++, state++) {
-		if (len == strlen(s->label) && !strncmp(buf, s->label, len)) {
+		if (*s && len == strlen(*s) && !strncmp(buf, *s, len)) {
 #ifdef CONFIG_EARLYSUSPEND
 			if (state == PM_SUSPEND_ON || valid_state(state)) {
 				error = 0;
