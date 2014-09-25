@@ -71,7 +71,7 @@ static spinlock_t speedchange_cpumask_lock;
 static struct mutex gov_lock;
 
 /* Hi speed to bump to from lo speed when load burst (default max) */
-static unsigned int hispeed_freq = 1566000;
+static unsigned int hispeed_freq = 1350000;
 
 /* Go to hi speed when CPU load at or above this value. */
 #define DEFAULT_GO_HISPEED_LOAD 99
@@ -140,7 +140,7 @@ static spinlock_t timer_slack_lock;
 static int *timer_slack_vals = default_timer_slack_val;
 static int ntimer_slack_vals = ARRAY_SIZE(default_timer_slack_val);
 
-static bool io_is_busy;
+static bool io_is_busy = 0;
 
 /*
  * If the max load among other CPUs is higher than up_threshold_any_cpu_load
@@ -149,7 +149,7 @@ static bool io_is_busy;
  * sync_freq
  */
 static unsigned int up_threshold_any_cpu_load = 80;
-static unsigned int sync_freq = 1242000;
+static unsigned int sync_freq = 1350000;
 static unsigned int up_threshold_any_cpu_freq = 1350000;
 
 static void cpufreq_interactive_timer_resched(
@@ -204,7 +204,8 @@ static void cpufreq_interactive_timer_start(int cpu)
 
 	spin_lock_irqsave(&pcpu->load_lock, flags);
 	pcpu->time_in_idle =
-		get_cpu_idle_time(cpu, &pcpu->time_in_idle_timestamp, io_is_busy);
+		get_cpu_idle_time(cpu, &pcpu->time_in_idle_timestamp,
+				io_is_busy);
 	pcpu->cputime_speedadj = 0;
 	pcpu->cputime_speedadj_timestamp = pcpu->time_in_idle_timestamp;
 	spin_unlock_irqrestore(&pcpu->load_lock, flags);
@@ -1397,6 +1398,9 @@ static int cpufreq_governor_interactive(struct cpufreq_policy *policy,
 
 	switch (event) {
 	case CPUFREQ_GOV_START:
+		if (!cpu_online(policy->cpu))
+			return -EINVAL;
+
 		mutex_lock(&gov_lock);
 
 		freq_table =
