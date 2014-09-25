@@ -5032,7 +5032,7 @@ store_polling(struct device *dev, struct device_attribute *attr,
 	} else {
 		mmc->caps &= ~MMC_CAP_NEEDS_POLL;
 	}
-#ifdef CONFIG_POWERSUSPEND
+#ifdef CONFIG_HAS_EARLYSUSPEND
 	host->polling_enabled = mmc->caps & MMC_CAP_NEEDS_POLL;
 #endif
 	spin_unlock_irqrestore(&host->lock, flags);
@@ -5154,8 +5154,8 @@ store_enable_auto_cmd21(struct device *dev, struct device_attribute *attr,
 	return count;
 }
 
-#ifdef CONFIG_POWERSUSPEND
-static void msmsdcc_early_suspend(struct power_suspend *h)
+#ifdef CONFIG_HAS_EARLYSUSPEND
+static void msmsdcc_early_suspend(struct early_suspend *h)
 {
 	struct msmsdcc_host *host =
 		container_of(h, struct msmsdcc_host, early_suspend);
@@ -5166,7 +5166,7 @@ static void msmsdcc_early_suspend(struct power_suspend *h)
 	host->mmc->caps &= ~MMC_CAP_NEEDS_POLL;
 	spin_unlock_irqrestore(&host->lock, flags);
 };
-static void msmsdcc_late_resume(struct power_suspend *h)
+static void msmsdcc_late_resume(struct early_suspend *h)
 {
 	struct msmsdcc_host *host =
 		container_of(h, struct msmsdcc_host, early_suspend);
@@ -6307,11 +6307,11 @@ msmsdcc_probe(struct platform_device *pdev)
 	mmc->clk_scaling.polling_delay_ms = 100;
 	mmc->caps2 |= MMC_CAP2_CLK_SCALE;
 
-#ifdef CONFIG_POWERSUSPEND
+#ifdef CONFIG_HAS_EARLYSUSPEND
 	host->early_suspend.suspend = msmsdcc_early_suspend;
 	host->early_suspend.resume  = msmsdcc_late_resume;
-	/*host->early_suspend.level   = EARLY_SUSPEND_LEVEL_DISABLE_FB;*/
-	register_power_suspend(&host->early_suspend);
+	host->early_suspend.level   = EARLY_SUSPEND_LEVEL_DISABLE_FB;
+	register_early_suspend(&host->early_suspend);
 #endif
 
 	pr_info("%s: Qualcomm MSM SDCC-core at 0x%016llx irq %d,%d dma %d"
@@ -6567,8 +6567,8 @@ static int msmsdcc_remove(struct platform_device *pdev)
 	iounmap(host->base);
 	mmc_free_host(mmc);
 
-#ifdef CONFIG_POWERSUSPEND
-	unregister_power_suspend(&host->early_suspend);
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	unregister_early_suspend(&host->early_suspend);
 #endif
 	pm_runtime_disable(&(pdev)->dev);
 	pm_runtime_set_suspended(&(pdev)->dev);

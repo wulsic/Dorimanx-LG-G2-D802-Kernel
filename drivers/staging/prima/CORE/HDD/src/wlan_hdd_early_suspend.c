@@ -35,11 +35,11 @@
 /**-----------------------------------------------------------------------------
 *   Include files
 * ----------------------------------------------------------------------------*/
-#ifdef CONFIG_POWERSUSPEND
+#ifdef CONFIG_HAS_EARLYSUSPEND
 
 #include <linux/pm.h>
 #include <linux/wait.h>
-#include <linux/powersuspend.h>
+#include <linux/earlysuspend.h>
 #include <wlan_hdd_includes.h>
 #include <wlan_qct_driver.h>
 #include <linux/wakelock.h>
@@ -97,8 +97,8 @@
 #include "wlan_hdd_power.h"
 #include "wlan_hdd_packet_filtering.h"
 
-#ifdef CONFIG_POWERSUSPEND
-static struct power_suspend wlan_early_suspend;
+#ifdef CONFIG_HAS_EARLYSUSPEND
+static struct early_suspend wlan_early_suspend;
 #endif
 
 static eHalStatus g_full_pwr_status;
@@ -776,7 +776,7 @@ void hdd_conf_mcastbcast_filter(hdd_context_t* pHddCtx, v_BOOL_t setfilter)
        pHddCtx->hdd_mcastbcast_filter_set = TRUE;
 }
 
-#ifdef CONFIG_POWERSUSPEND
+#ifdef CONFIG_HAS_EARLYSUSPEND
 #ifdef FEATURE_WLAN_INTEGRATED_SOC
 static void hdd_conf_suspend_ind(hdd_context_t* pHddCtx,
                                  hdd_adapter_t *pAdapter)
@@ -965,7 +965,7 @@ static void hdd_conf_resume_ind(hdd_context_t* pHddCtx, v_U8_t sessionId)
 #endif
 
 //Suspend routine registered with Android OS
-void hdd_suspend_wlan(struct power_suspend *wlan_suspend)
+void hdd_suspend_wlan(struct early_suspend *wlan_suspend)
 {
    hdd_context_t *pHddCtx = NULL;
    v_CONTEXT_t pVosContext = NULL;
@@ -1229,7 +1229,7 @@ void hdd_unregister_mcast_bcast_filter(hdd_context_t *pHddCtx)
    }
 }
 
-void hdd_resume_wlan(struct power_suspend *wlan_suspend)
+void hdd_resume_wlan(struct early_suspend *wlan_suspend)
 {
    hdd_context_t *pHddCtx = NULL;
    hdd_adapter_t *pAdapter = NULL;
@@ -1519,7 +1519,7 @@ VOS_STATUS hdd_wlan_reset(void)
       VOS_ASSERT( VOS_IS_STATUS_SUCCESS( vosStatus ) );
    }
 #endif
-#ifdef CONFIG_POWERSUSPEND
+#ifdef CONFIG_HAS_EARLYSUSPEND
    hdd_unregister_mcast_bcast_filter(pHddCtx);
 #endif
 
@@ -1741,7 +1741,7 @@ VOS_STATUS hdd_wlan_reset(void)
    hdd_start_all_adapters(pHddCtx);
    pHddCtx->isLogpInProgress = FALSE;
    pHddCtx->hdd_mcastbcast_filter_set = FALSE;
-#ifdef CONFIG_POWERSUSPEND
+#ifdef CONFIG_HAS_EARLYSUSPEND
    hdd_register_mcast_bcast_filter(pHddCtx);
 #endif
 
@@ -1785,7 +1785,7 @@ err_pwr_fail:
    // Allow the phone to go to sleep
    hdd_allow_suspend();
 
-#ifdef CONFIG_POWERSUSPEND
+#ifdef CONFIG_HAS_EARLYSUSPEND
    // unregister suspend/resume callbacks
    if(pHddCtx->cfg_ini->nEnableSuspend)
       unregister_wlan_suspend();
@@ -1907,17 +1907,17 @@ void register_wlan_suspend(void)
 {
    hddLog(VOS_TRACE_LEVEL_INFO, "%s: Register WLAN suspend/resume "
             "callbacks",__func__);
-   /*wlan_early_suspend.level = EARLY_SUSPEND_LEVEL_STOP_DRAWING;*/
+   wlan_early_suspend.level = EARLY_SUSPEND_LEVEL_STOP_DRAWING;
    wlan_early_suspend.suspend = hdd_suspend_wlan;
    wlan_early_suspend.resume = hdd_resume_wlan;
-   register_power_suspend(&wlan_early_suspend);
+   register_early_suspend(&wlan_early_suspend);
 }
 
 void unregister_wlan_suspend(void)
 {
    hddLog(VOS_TRACE_LEVEL_INFO, "%s: Unregister WLAN suspend/resume "
             "callbacks",__func__);
-   unregister_power_suspend(&wlan_early_suspend);
+   unregister_early_suspend(&wlan_early_suspend);
 }
 #endif
 
@@ -1946,7 +1946,7 @@ VOS_STATUS hdd_wlan_shutdown(void)
       return VOS_STATUS_E_FAILURE;
    }
    hdd_reset_all_adapters(pHddCtx);
-#ifdef CONFIG_POWERSUSPEND
+#ifdef CONFIG_HAS_EARLYSUSPEND
     /* unregister suspend/resume callbacks */
     if(pHddCtx->cfg_ini->nEnableSuspend)
     {
@@ -2044,7 +2044,7 @@ VOS_STATUS hdd_wlan_shutdown(void)
    vosStatus = WLANTL_Stop(pVosContext);
    VOS_ASSERT(VOS_IS_STATUS_SUCCESS(vosStatus));
 
-#ifdef CONFIG_POWERSUSPEND
+#ifdef CONFIG_HAS_EARLYSUSPEND
    hdd_unregister_mcast_bcast_filter(pHddCtx);
 #endif
    hddLog(VOS_TRACE_LEVEL_INFO, "%s: Flush Queues",__func__);
@@ -2206,7 +2206,7 @@ VOS_STATUS hdd_wlan_re_init(void)
    hdd_start_all_adapters(pHddCtx);
    pHddCtx->isLogpInProgress = FALSE;
    pHddCtx->hdd_mcastbcast_filter_set = FALSE;
-#ifdef CONFIG_POWERSUSPEND
+#ifdef CONFIG_HAS_EARLYSUSPEND
    hdd_register_mcast_bcast_filter(pHddCtx);
 #endif
 
@@ -2217,7 +2217,7 @@ VOS_STATUS hdd_wlan_re_init(void)
       hddLog(VOS_TRACE_LEVEL_FATAL,"%s: hddRegisterPmOps failed",__func__);
       goto err_bap_stop;
    }
-#ifdef CONFIG_POWERSUSPEND
+#ifdef CONFIG_HAS_EARLYSUSPEND
    // Register suspend/resume callbacks
    if(pHddCtx->cfg_ini->nEnableSuspend)
    {
@@ -2236,7 +2236,7 @@ VOS_STATUS hdd_wlan_re_init(void)
    goto success;
 
 err_unregister_pmops:
-#ifdef CONFIG_POWERSUSPEND
+#ifdef CONFIG_HAS_EARLYSUSPEND
    /* unregister suspend/resume callbacks */
    if (pHddCtx->cfg_ini->nEnableSuspend)
       unregister_wlan_suspend();
@@ -2244,7 +2244,7 @@ err_unregister_pmops:
    hddDeregisterPmOps(pHddCtx);
 
 err_bap_stop:
-#ifdef CONFIG_POWERSUSPEND
+#ifdef CONFIG_HAS_EARLYSUSPEND
    hdd_unregister_mcast_bcast_filter(pHddCtx);
 #endif
    hdd_close_all_adapters(pHddCtx);
