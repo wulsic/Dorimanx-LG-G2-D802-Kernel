@@ -37,6 +37,9 @@
 #ifdef CONFIG_LCD_NOTIFY
 #include <linux/lcd_notify.h>
 #endif
+#ifdef CONFIG_POWERSUSPEND
+#include <linux/powersuspend.h>
+#endif
 
 #define DSI_VIDEO_BASE	0xE0000
 
@@ -140,6 +143,10 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	lcd_notifier_call_chain(LCD_EVENT_ON_END, NULL);
 #endif
 
+#ifdef CONFIG_POWERSUSPEND
+	set_power_suspend_state_panel_hook(POWER_SUSPEND_INACTIVE);
+#endif
+
 	usleep(5000);
 
 	if (mipi_dsi_pdata && mipi_dsi_pdata->active_reset)
@@ -218,6 +225,10 @@ static int mipi_dsi_on(struct platform_device *pdev)
 
 #ifdef CONFIG_LCD_NOTIFY
 	lcd_notifier_call_chain(LCD_EVENT_ON_START, NULL);
+#endif
+
+#ifdef CONFIG_POWERSUSPEND
+	set_power_suspend_state_panel_hook(POWER_SUSPEND_ACTIVE);
 #endif
 
 	if (system_rev == 6)
