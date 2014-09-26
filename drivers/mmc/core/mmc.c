@@ -1471,26 +1471,22 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 
 			/*
 			 * Calculate the time to start the BKOPs checking.
-			 * The idle time of the host controller should be taken
-			 * into account in order to prevent a race condition
-			 * before starting BKOPs and going into suspend.
-			 * If the host controller didn't set its idle time,
+			 * The host controller can set this time in order to
+			 * prevent a race condition before starting BKOPs
+			 * and going into suspend.
+			 * If the host controller didn't set this time,
 			 * a default value is used.
 			 */
 			card->bkops_info.delay_ms = MMC_IDLE_BKOPS_TIME_MS;
-			if (card->bkops_info.host_suspend_tout_ms)
-				card->bkops_info.delay_ms = min(
-					card->bkops_info.delay_ms,
-				      card->bkops_info.host_suspend_tout_ms/2);
-
-			card->bkops_info.min_sectors_to_queue_delayed_work =
-				BKOPS_MIN_SECTORS_TO_QUEUE_DELAYED_WORK;
+			if (card->bkops_info.host_delay_ms)
+				card->bkops_info.delay_ms =
+					card->bkops_info.host_delay_ms;
 		}
 	}
 
 	/* if it is from resume. check bkops mode */
 	if (oldcard) {
-		if (oldcard->bkops_enable) {
+		if (oldcard->bkops_enable & 0xFE) {
 			/*
 			 * if bkops mode is enable before getting suspend.
 			 * turn on the bkops mode

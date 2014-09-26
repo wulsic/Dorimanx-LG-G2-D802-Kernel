@@ -135,7 +135,6 @@ struct mmc_blk_data {
 	struct device_attribute power_ro_lock;
 	struct device_attribute num_wr_reqs_to_start_packing;
 	struct device_attribute bkops_check_threshold;
-	struct device_attribute no_pack_for_random;
 	int	area_type;
 };
 
@@ -198,13 +197,9 @@ static ssize_t power_ro_lock_show(struct device *dev,
 {
 	int ret;
 	struct mmc_blk_data *md = mmc_blk_get(dev_to_disk(dev));
-	struct mmc_card *card;
+	struct mmc_card *card = md->queue.card;
 	int locked = 0;
 
-	if (!md)
-		return -EINVAL;
-
-	card = md->queue.card;
 	if (card->ext_csd.boot_ro_lock & EXT_CSD_BOOT_WP_B_PERM_WP_EN)
 		locked = 2;
 	else if (card->ext_csd.boot_ro_lock & EXT_CSD_BOOT_WP_B_PWR_WP_EN)
@@ -230,8 +225,6 @@ static ssize_t power_ro_lock_store(struct device *dev,
 		return count;
 
 	md = mmc_blk_get(dev_to_disk(dev));
-	if (!md)
-		return -EINVAL;
 	card = md->queue.card;
 
 	mmc_claim_host(card->host);
@@ -269,9 +262,6 @@ static ssize_t force_ro_show(struct device *dev, struct device_attribute *attr,
 	int ret;
 	struct mmc_blk_data *md = mmc_blk_get(dev_to_disk(dev));
 
-	if (!md)
-		return -EINVAL;
-
 	ret = snprintf(buf, PAGE_SIZE, "%d",
 		       get_disk_ro(dev_to_disk(dev)) ^
 		       md->read_only);
@@ -286,10 +276,6 @@ static ssize_t force_ro_store(struct device *dev, struct device_attribute *attr,
 	char *end;
 	struct mmc_blk_data *md = mmc_blk_get(dev_to_disk(dev));
 	unsigned long set = simple_strtoul(buf, &end, 0);
-
-	if (!md)
-		return -EINVAL;
-
 	if (end == buf) {
 		ret = -EINVAL;
 		goto out;
@@ -310,8 +296,6 @@ num_wr_reqs_to_start_packing_show(struct device *dev,
 	int num_wr_reqs_to_start_packing;
 	int ret;
 
-	if (!md)
-		return -EINVAL;
 	num_wr_reqs_to_start_packing = md->queue.num_wr_reqs_to_start_packing;
 
 	ret = snprintf(buf, PAGE_SIZE, "%d\n", num_wr_reqs_to_start_packing);
@@ -328,9 +312,6 @@ num_wr_reqs_to_start_packing_store(struct device *dev,
 	int value;
 	struct mmc_blk_data *md = mmc_blk_get(dev_to_disk(dev));
 
-	if (!md)
-		return -EINVAL;
-
 	sscanf(buf, "%d", &value);
 	if (value >= 0)
 		md->queue.num_wr_reqs_to_start_packing = value;
@@ -344,13 +325,9 @@ bkops_check_threshold_show(struct device *dev,
 				  struct device_attribute *attr, char *buf)
 {
 	struct mmc_blk_data *md = mmc_blk_get(dev_to_disk(dev));
-	struct mmc_card *card;
+	struct mmc_card *card = md->queue.card;
 	int ret;
 
-	if (!md)
-		return -EINVAL;
-
-	card = md->queue.card;
 	if (!card)
 		ret = -EINVAL;
 	else
@@ -368,14 +345,10 @@ bkops_check_threshold_store(struct device *dev,
 {
 	int value;
 	struct mmc_blk_data *md = mmc_blk_get(dev_to_disk(dev));
-	struct mmc_card *card;
+	struct mmc_card *card = md->queue.card;
 	unsigned int card_size;
 	int ret = count;
 
-	if (!md)
-		return -EINVAL;
-
-	card = md->queue.card;
 	if (!card) {
 		ret = -EINVAL;
 		goto exit;
@@ -404,61 +377,6 @@ bkops_check_threshold_store(struct device *dev,
 exit:
 	mmc_blk_put(md);
 	return count;
-}
-
-static ssize_t
-no_pack_for_random_show(struct device *dev,
-				  struct device_attribute *attr, char *buf)
-{
-	struct mmc_blk_data *md = mmc_blk_get(dev_to_disk(dev));
-	int ret;
-
-	if (!md)
-		return -EINVAL;
-	ret = snprintf(buf, PAGE_SIZE, "%d\n", md->queue.no_pack_for_random);
-
-	mmc_blk_put(md);
-	return ret;
-}
-
-static ssize_t
-no_pack_for_random_store(struct device *dev,
-				 struct device_attribute *attr,
-				 const char *buf, size_t count)
-{
-	int value;
-	struct mmc_blk_data *md = mmc_blk_get(dev_to_disk(dev));
-	struct mmc_card *card;
-	int ret = count;
-
-	if (!md)
-		return -EINVAL;
-
-	card = md->queue.card;
-	if (!card) {
-		ret = -EINVAL;
-		goto exit;
-	}
-
-	sscanf(buf, "%d", &value);
-
-	if (value < 0) {
-		pr_err("%s: value %d is not valid. old value remains = %d",
-			mmc_hostname(card->host), value,
-			md->queue.no_pack_for_random);
-		ret = -EINVAL;
-		goto exit;
-	}
-
-	md->queue.no_pack_for_random = (value > 0) ?  true : false;
-
-	pr_debug("%s: no_pack_for_random: new value = %d",
-		mmc_hostname(card->host),
-		md->queue.no_pack_for_random);
-
-exit:
-	mmc_blk_put(md);
-	return ret;
 }
 
 static int mmc_blk_open(struct block_device *bdev, fmode_t mode)
@@ -620,7 +538,7 @@ static int mmc_blk_ioctl_cmd(struct block_device *bdev,
 	md = mmc_blk_get(bdev->bd_disk);
 	if (!md) {
 		err = -EINVAL;
-		goto blk_err;
+		goto cmd_done;
 	}
 
 	card = md->queue.card;
@@ -720,7 +638,6 @@ cmd_rel_host:
 
 cmd_done:
 	mmc_blk_put(md);
-blk_err:
 	if (sg)
 		kfree(sg);
 	kfree(idata->buf);
@@ -733,7 +650,7 @@ static int mmc_blk_ioctl(struct block_device *bdev, fmode_t mode,
 {
 #if defined(CONFIG_MMC_CPRM)
 	struct mmc_blk_data *md = bdev->bd_disk->private_data;
-	struct mmc_card *card;
+	struct mmc_card *card = md->queue.card;
 
 	static int i;
 	static unsigned long temp_arg[16] = {0};
@@ -742,14 +659,6 @@ static int mmc_blk_ioctl(struct block_device *bdev, fmode_t mode,
 	if (cmd == MMC_IOC_CMD)
 		ret = mmc_blk_ioctl_cmd(bdev, (struct mmc_ioc_cmd __user *)arg);
 #if defined(CONFIG_MMC_CPRM)
-	if (!md)
-		return -EINVAL;
-
-	card = md->queue.card;
-	if (!card) {
-		mmc_blk_put(md);
-		return -EINVAL;
-	}
 	printk(KERN_DEBUG " %s ], %x ", __func__, cmd);
 
 	switch (cmd) {
@@ -1139,14 +1048,8 @@ static int mmc_blk_reset(struct mmc_blk_data *md, struct mmc_host *host,
 
 	md->reset_done |= type;
 	err = mmc_hw_reset(host);
-	if (err && err != -EOPNOTSUPP) {
-		/* We failed to reset so we need to abort the request */
-		pr_err("%s: %s: failed to reset %d\n", mmc_hostname(host),
-				__func__, err);
-		return -ENODEV;
-	}
 	/* Ensure we switch back to the correct partition */
-	if (host->card) {
+	if (err != -EOPNOTSUPP) {
 		struct mmc_blk_data *main_md = mmc_get_drvdata(host->card);
 		int part_err;
 
@@ -1422,14 +1325,6 @@ static int mmc_blk_err_check(struct mmc_card *card,
 		u32 status;
 		unsigned long timeout;
 
-		/* Check stop command response */
-		if (brq->stop.resp[0] & R1_ERROR) {
-			pr_err("%s: %s: general error sending stop command, stop cmd response %#x\n",
-			       req->rq_disk->disk_name, __func__,
-			       brq->stop.resp[0]);
-			gen_err = 1;
-		}
-
 		timeout = jiffies + msecs_to_jiffies(MMC_BLK_TIMEOUT_MS);
 		do {
 			int err = get_card_status(card, &status, 5);
@@ -1449,14 +1344,6 @@ static int mmc_blk_err_check(struct mmc_card *card,
 
 				return MMC_BLK_CMD_ERR;
 			}
-
-			if (status & R1_ERROR) {
-				pr_err("%s: %s: general error sending status command, card status %#x\n",
-				       req->rq_disk->disk_name, __func__,
-				       status);
-				gen_err = 1;
-			}
-
 			/*
 			 * Some cards mishandle the status bits,
 			 * so make sure to check both the busy
@@ -1503,120 +1390,6 @@ static int mmc_blk_err_check(struct mmc_card *card,
 		return MMC_BLK_PARTIAL;
 
 	return MMC_BLK_SUCCESS;
-}
-
-/*
- * mmc_blk_reinsert_req() - re-insert request back to the scheduler
- * @areq:	request to re-insert.
- *
- * Request may be packed or single. When fails to reinsert request, it will be
- * requeued to the the dispatch queue.
- */
-static void mmc_blk_reinsert_req(struct mmc_async_req *areq)
-{
-	struct request *prq;
-	int ret = 0;
-	struct mmc_queue_req *mq_rq;
-	struct request_queue *q;
-
-	mq_rq = container_of(areq, struct mmc_queue_req, mmc_active);
-	q = mq_rq->req->q;
-	if (mq_rq->packed_cmd != MMC_PACKED_NONE) {
-		while (!list_empty(&mq_rq->packed_list)) {
-			/* return requests in reverse order */
-			prq = list_entry_rq(mq_rq->packed_list.prev);
-			list_del_init(&prq->queuelist);
-			spin_lock_irq(q->queue_lock);
-			ret = blk_reinsert_request(q, prq);
-			if (ret) {
-				blk_requeue_request(q, prq);
-				spin_unlock_irq(q->queue_lock);
-				goto reinsert_error;
-			}
-			spin_unlock_irq(q->queue_lock);
-		}
-	} else {
-		spin_lock_irq(q->queue_lock);
-		ret = blk_reinsert_request(q, mq_rq->req);
-		if (ret)
-			blk_requeue_request(q, mq_rq->req);
-		spin_unlock_irq(q->queue_lock);
-	}
-	return;
-
-reinsert_error:
-	pr_err("%s: blk_reinsert_request() failed (%d)",
-			mq_rq->req->rq_disk->disk_name, ret);
-	/*
-	 * -EIO will be reported for this request and rest of packed_list.
-	 *  Urgent request will be proceeded anyway, while upper layer
-	 *  responsibility to re-send failed requests
-	 */
-	while (!list_empty(&mq_rq->packed_list)) {
-		prq = list_entry_rq(mq_rq->packed_list.next);
-		list_del_init(&prq->queuelist);
-		spin_lock_irq(q->queue_lock);
-		blk_requeue_request(q, prq);
-		spin_unlock_irq(q->queue_lock);
-	}
-}
-
-/*
- * mmc_blk_update_interrupted_req() - update of the stopped request
- * @card:	the MMC card associated with the request.
- * @areq:	interrupted async request.
- *
- * Get stopped request state from card and update successfully done part of
- * the request by setting packed_fail_idx.  The packed_fail_idx is index of
- * first uncompleted request in packed request list, for non-packed request
- * packed_fail_idx remains unchanged.
- *
- * Returns: MMC_BLK_SUCCESS for success, MMC_BLK_ABORT otherwise
- */
-static int mmc_blk_update_interrupted_req(struct mmc_card *card,
-					struct mmc_async_req *areq)
-{
-	int ret = MMC_BLK_SUCCESS;
-	u8 *ext_csd;
-	int correctly_done;
-	struct mmc_queue_req *mq_rq = container_of(areq, struct mmc_queue_req,
-				      mmc_active);
-	struct request *prq;
-	u8 req_index = 0;
-
-	if (mq_rq->packed_cmd == MMC_PACKED_NONE)
-		return MMC_BLK_SUCCESS;
-
-	ext_csd = kmalloc(512, GFP_KERNEL);
-	if (!ext_csd)
-		return MMC_BLK_ABORT;
-
-	/* get correctly programmed sectors number from card */
-	ret = mmc_send_ext_csd(card, ext_csd);
-	if (ret) {
-		pr_err("%s: error %d reading ext_csd\n",
-				mmc_hostname(card->host), ret);
-		ret = MMC_BLK_ABORT;
-		goto exit;
-	}
-	correctly_done = card->ext_csd.data_sector_size *
-		(ext_csd[EXT_CSD_CORRECTLY_PRG_SECTORS_NUM + 0] << 0 |
-		 ext_csd[EXT_CSD_CORRECTLY_PRG_SECTORS_NUM + 1] << 8 |
-		 ext_csd[EXT_CSD_CORRECTLY_PRG_SECTORS_NUM + 2] << 16 |
-		 ext_csd[EXT_CSD_CORRECTLY_PRG_SECTORS_NUM + 3] << 24);
-
-	list_for_each_entry(prq, &mq_rq->packed_list, queuelist) {
-		if ((correctly_done - (int)blk_rq_bytes(prq)) < 0) {
-			/* prq is not successfull */
-			mq_rq->packed_fail_idx = req_index;
-			break;
-		}
-		correctly_done -= blk_rq_bytes(prq);
-		req_index++;
-	}
-exit:
-	kfree(ext_csd);
-	return ret;
 }
 
 static int mmc_blk_packed_err_check(struct mmc_card *card,
@@ -1815,27 +1588,9 @@ static void mmc_blk_rw_rq_prep(struct mmc_queue_req *mqrq,
 
 	mqrq->mmc_active.mrq = &brq->mrq;
 	mqrq->mmc_active.err_check = mmc_blk_err_check;
-	mqrq->mmc_active.cmd_flags = req->cmd_flags;
-	mqrq->mmc_active.reinsert_req = mmc_blk_reinsert_req;
-	mqrq->mmc_active.update_interrupted_req =
-		mmc_blk_update_interrupted_req;
 
 	mmc_queue_bounce_pre(mqrq);
 }
-
-/**
- * mmc_blk_disable_wr_packing() - disables packing mode
- * @mq:	MMC queue.
- *
- */
-void mmc_blk_disable_wr_packing(struct mmc_queue *mq)
-{
-	if (mq) {
-		mq->wr_packing_enabled = false;
-		mq->num_of_potential_packed_wr_reqs = 0;
-	}
-}
-EXPORT_SYMBOL(mmc_blk_disable_wr_packing);
 
 static void mmc_blk_write_packing_control(struct mmc_queue *mq,
 					  struct request *req)
@@ -1867,7 +1622,8 @@ static void mmc_blk_write_packing_control(struct mmc_queue *mq,
 	data_dir = rq_data_dir(req);
 
 	if (data_dir == READ) {
-		mmc_blk_disable_wr_packing(mq);
+		mq->num_of_potential_packed_wr_reqs = 0;
+		mq->wr_packing_enabled = false;
 		return;
 	} else if (data_dir == WRITE) {
 		mq->num_of_potential_packed_wr_reqs++;
@@ -2078,15 +1834,6 @@ static u8 mmc_blk_prep_packed_list(struct mmc_queue *mq, struct request *req)
 			break;
 		}
 
-		if (mq->no_pack_for_random) {
-			if ((blk_rq_pos(cur) + blk_rq_sectors(cur)) !=
-			    blk_rq_pos(next)) {
-				MMC_BLK_UPDATE_STOP_REASON(stats, RANDOM);
-				put_back = 1;
-				break;
-			}
-		}
-
 		if (rq_data_dir(next) == WRITE) {
 			mq->num_of_potential_packed_wr_reqs++;
 			if (card->ext_csd.bkops_en)
@@ -2208,7 +1955,6 @@ static void mmc_blk_packed_hdr_wrq_prep(struct mmc_queue_req *mqrq,
 	brq->data.sg_len = mmc_queue_map_sg(mq, mqrq);
 
 	mqrq->mmc_active.mrq = &brq->mrq;
-	mqrq->mmc_active.cmd_flags = req->cmd_flags;
 
 	/*
 	 * This is intended for packed commands tests usage - in case these
@@ -2221,11 +1967,6 @@ static void mmc_blk_packed_hdr_wrq_prep(struct mmc_queue_req *mqrq,
 
 	if (mq->packed_test_fn)
 		mq->packed_test_fn(mq->queue, mqrq);
-
-
-	mqrq->mmc_active.reinsert_req = mmc_blk_reinsert_req;
-	mqrq->mmc_active.update_interrupted_req =
-		mmc_blk_update_interrupted_req;
 
 	mmc_queue_bounce_pre(mqrq);
 }
@@ -2368,22 +2109,6 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *rqc)
 		mmc_queue_bounce_post(mq_rq);
 
 		switch (status) {
-		case MMC_BLK_NEW_REQUEST:
-			BUG(); /* should never get here */
-		case MMC_BLK_URGENT:
-			if (mq_rq->packed_cmd != MMC_PACKED_NONE) {
-				/* complete successfully transmitted part */
-				if (mmc_blk_end_packed_req(mq_rq))
-					/* process for not transmitted part */
-					mmc_blk_reinsert_req(areq);
-			} else {
-				mmc_blk_reinsert_req(areq);
-			}
-
-			mq->flags |= MMC_QUEUE_URGENT_REQUEST;
-			ret = 0;
-			break;
-		case MMC_BLK_URGENT_DONE:
 		case MMC_BLK_SUCCESS:
 		case MMC_BLK_PARTIAL:
 			/*
@@ -2517,18 +2242,17 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 	struct mmc_card *card = md->queue.card;
 	struct mmc_host *host = card->host;
 	unsigned long flags;
-	unsigned int cmd_flags = req ? req->cmd_flags : 0;
-
-	if (req && !mq->mqrq_prev->req) {
-		/* claim host only for the first request */
-		mmc_claim_host(card->host);
 
 #ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
 	if (mmc_bus_needs_resume(card->host)) {
 		mmc_resume_bus(card->host);
+		mmc_blk_set_blksize(md, card);
 	}
 #endif
 
+	if (req && !mq->mqrq_prev->req) {
+		/* claim host only for the first request */
+		mmc_claim_host(card->host);
 		if (card->ext_csd.bkops_en)
 			mmc_stop_bkops(card);
 	}
@@ -2545,23 +2269,21 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 	mmc_blk_write_packing_control(mq, req);
 	mq->flags &= ~MMC_QUEUE_NEW_REQUEST;
 
-	mq->flags &= ~MMC_QUEUE_NEW_REQUEST;
-	mq->flags &= ~MMC_QUEUE_URGENT_REQUEST;
-	if (cmd_flags & REQ_SANITIZE) {
+	if (req && req->cmd_flags & REQ_SANITIZE) {
 		/* complete ongoing async transfer before issuing sanitize */
 		if (card->host && card->host->areq)
 			mmc_blk_issue_rw_rq(mq, NULL);
 		ret = mmc_blk_issue_sanitize_rq(mq, req);
-	} else if (cmd_flags & REQ_DISCARD) {
+	} else if (req && req->cmd_flags & REQ_DISCARD) {
 		/* complete ongoing async transfer before issuing discard */
 		if (card->host->areq)
 			mmc_blk_issue_rw_rq(mq, NULL);
-		if (cmd_flags & REQ_SECURE &&
+		if (req->cmd_flags & REQ_SECURE &&
 			!(card->quirks & MMC_QUIRK_SEC_ERASE_TRIM_BROKEN))
 			ret = mmc_blk_issue_secdiscard_rq(mq, req);
 		else
 			ret = mmc_blk_issue_discard_rq(mq, req);
-	} else if (cmd_flags & REQ_FLUSH) {
+	} else if (req && req->cmd_flags & REQ_FLUSH) {
 		/* complete ongoing async transfer before issuing flush */
 		if (card->host->areq)
 			mmc_blk_issue_rw_rq(mq, NULL);
@@ -2576,21 +2298,9 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 	}
 
 out:
-	/*
-	 * packet burst is over, when one of the following occurs:
-	 * - no more requests and new request notification is not in progress
-	 * - urgent notification in progress and current request is not urgent
-	 *   (all existing requests completed or reinserted to the block layer)
-	 */
-	if ((!req && !(mq->flags & MMC_QUEUE_NEW_REQUEST)) ||
-			((mq->flags & MMC_QUEUE_URGENT_REQUEST) &&
-			 !(cmd_flags & MMC_REQ_NOREINSERT_MASK))) {
-		if (mmc_card_need_bkops(card))
-			mmc_start_bkops(card, false);
-
+	if (!req && !(mq->flags & MMC_QUEUE_NEW_REQUEST))
 		/* release host only when there are no more requests */
 		mmc_release_host(card->host);
-	}
 	return ret;
 }
 
@@ -2894,16 +2604,6 @@ static int mmc_add_disk(struct mmc_blk_data *md)
 				 &md->bkops_check_threshold);
 	if (ret)
 		goto bkops_check_threshold_fails;
-
-	md->no_pack_for_random.show = no_pack_for_random_show;
-	md->no_pack_for_random.store = no_pack_for_random_store;
-	sysfs_attr_init(&md->no_pack_for_random.attr);
-	md->no_pack_for_random.attr.name = "no_pack_for_random";
-	md->no_pack_for_random.attr.mode = S_IRUGO | S_IWUSR;
-	ret = device_create_file(disk_to_dev(md->disk),
-				 &md->no_pack_for_random);
-	if (ret)
-		goto num_wr_reqs_to_start_packing_fail;
 
 	return ret;
 
@@ -3243,3 +2943,4 @@ module_exit(mmc_blk_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Multimedia Card (MMC) block device driver");
+
