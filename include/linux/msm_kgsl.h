@@ -662,6 +662,9 @@ struct kgsl_gpumem_get_info {
  * @gpuaddr: GPU address of the buffer to sync.
  * @id: id of the buffer to sync. Either gpuaddr or id is sufficient.
  * @op: a mask of KGSL_GPUMEM_CACHE_* values
+ * @offset: offset into the buffer
+ * @length: number of bytes starting from offset to perform
+ * the cache operation on
  *
  * Sync the L2 cache for memory headed to and from the GPU - this replaces
  * KGSL_SHAREDMEM_FLUSH_CACHE since it can handle cache management for both
@@ -672,8 +675,8 @@ struct kgsl_gpumem_sync_cache {
 	unsigned int gpuaddr;
 	unsigned int id;
 	unsigned int op;
-/* private: reserved for future use*/
-	unsigned int __pad[2]; /* For future binary compatibility */
+	size_t offset;
+	size_t length;
 };
 
 #define KGSL_GPUMEM_CACHE_CLEAN (1 << 0)
@@ -685,6 +688,9 @@ struct kgsl_gpumem_sync_cache {
 #define KGSL_GPUMEM_CACHE_FLUSH \
 	(KGSL_GPUMEM_CACHE_CLEAN | KGSL_GPUMEM_CACHE_INV)
 
+/* Flag to ensure backwards compatibility of kgsl_gpumem_sync_cache struct */
+#define KGSL_GPUMEM_CACHE_RANGE (1 << 31U)
+
 #define IOCTL_KGSL_GPUMEM_SYNC_CACHE \
 	_IOW(KGSL_IOC_TYPE, 0x37, struct kgsl_gpumem_sync_cache)
 
@@ -692,7 +698,8 @@ struct kgsl_gpumem_sync_cache {
  * struct kgsl_perfcounter_get - argument to IOCTL_KGSL_PERFCOUNTER_GET
  * @groupid: Performance counter group ID
  * @countable: Countable to select within the group
- * @offset: Return offset of the reserved counter
+ * @offset: Return offset of the reserved LO counter
+ * @offset_hi: Return offset of the reserved HI counter
  *
  * Get an available performance counter from a specified groupid.  The offset
  * of the performance counter will be returned after successfully assigning
@@ -707,8 +714,9 @@ struct kgsl_perfcounter_get {
 	unsigned int groupid;
 	unsigned int countable;
 	unsigned int offset;
+	unsigned int offset_hi;
 /* private: reserved for future use */
-	unsigned int __pad[2]; /* For future binary compatibility */
+	unsigned int __pad; /* For future binary compatibility */
 };
 
 #define IOCTL_KGSL_PERFCOUNTER_GET \
