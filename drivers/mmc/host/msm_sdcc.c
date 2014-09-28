@@ -6147,15 +6147,11 @@ msmsdcc_probe(struct platform_device *pdev)
 		mmc->caps |= (MMC_CAP_SET_XPC_330 | MMC_CAP_SET_XPC_300 |
 				MMC_CAP_SET_XPC_180);
 
-
-	/* packed write */
-	mmc->caps2 |= plat->packed_write;
-
+	mmc->caps2 |= MMC_CAP2_PACKED_WR;
+	mmc->caps2 |= MMC_CAP2_PACKED_WR_CONTROL;
 	mmc->caps2 |= (MMC_CAP2_BOOTPART_NOACC | MMC_CAP2_DETECT_ON_ERR);
-	/* Disable Sanitize & BKOPS
-	 * mmc->caps2 |= MMC_CAP2_SANITIZE;
-	 * mmc->caps2 |= MMC_CAP2_INIT_BKOPS;
-	 */
+	mmc->caps2 |= MMC_CAP2_SANITIZE;
+	mmc->caps2 |= MMC_CAP2_CACHE_CTRL;
 	mmc->caps2 |= MMC_CAP2_POWEROFF_NOTIFY;
 	mmc->caps2 |= MMC_CAP2_STOP_REQUEST;
 
@@ -6726,7 +6722,7 @@ static inline void msmsdcc_ungate_clock(struct msmsdcc_host *host)
 }
 #endif
 
-#if CONFIG_DEBUG_FS
+#ifdef CONFIG_DEBUG_FS
 static void msmsdcc_print_pm_stats(struct msmsdcc_host *host, ktime_t start,
 				   const char *func, int err)
 {
@@ -6888,9 +6884,7 @@ static int msmsdcc_runtime_idle(struct device *dev)
 		return 0;
 
 	/* Idle timeout is not configurable for now */
-	/* Disable Runtime PM becasue of potential issues
-	 *pm_schedule_suspend(dev, host->idle_tout);
-	 */
+	pm_schedule_suspend(dev, host->idle_tout);
 
 	return -EAGAIN;
 }
@@ -7021,7 +7015,7 @@ static const struct dev_pm_ops msmsdcc_dev_pm_ops = {
 
 static const struct of_device_id msmsdcc_dt_match[] = {
 	{.compatible = "qcom,msm-sdcc"},
-
+	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, msmsdcc_dt_match);
 
