@@ -273,6 +273,7 @@ struct mmc_bkops_stats {
 	unsigned int		suspend;/* card sleed issued */
 	bool			print_stats;
 	unsigned int bkops_level[BKOPS_NUM_OF_SEVERITY_LEVELS];
+	bool			ignore_card_bkops_status;
 };
 
 /**
