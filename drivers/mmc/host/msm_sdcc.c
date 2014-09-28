@@ -3783,7 +3783,6 @@ static int msmsdcc_enable(struct mmc_host *mmc)
 {
 	struct device *dev = mmc->parent;
 	struct msmsdcc_host *host = mmc_priv(mmc);
-	unsigned long flags;
 	int rc = 0;
 
 	msmsdcc_pm_qos_update_latency(host, 1);
@@ -3816,7 +3815,6 @@ out:
 static int msmsdcc_disable(struct mmc_host *mmc)
 {
 	struct msmsdcc_host *host = mmc_priv(mmc);
-	unsigned long flags;
 	int rc = 0;
 
 	msmsdcc_pm_qos_update_latency(host, 0);
@@ -4320,16 +4318,13 @@ static int msmsdcc_execute_tuning(struct mmc_host *mmc, u32 opcode)
 		goto out;
 	}
 
-/*	phase = 0; */
 	is_tuning_all_phases = !(host->mmc->card &&
 		(host->saved_tuning_phase != INVALID_TUNING_PHASE));
-
 retry:
 	if (is_tuning_all_phases)
 		phase = 0; /* start from phase 0 during init */
 	else
 		phase = (u8)host->saved_tuning_phase;
-
 	do {
 		struct mmc_command cmd = {0};
 		struct mmc_data data = {0};
