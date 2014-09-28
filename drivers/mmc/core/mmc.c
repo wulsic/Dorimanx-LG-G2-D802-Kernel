@@ -564,12 +564,11 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 		if ((ext_csd[EXT_CSD_BKOPS_SUPPORT] & 0x1) &&
 		    card->ext_csd.hpi) {
 			card->ext_csd.bkops = 1;
-			card->ext_csd.bkops_en = ext_csd[EXT_CSD_BKOPS_EN] & 0x1;
+			card->ext_csd.bkops_en = ext_csd[EXT_CSD_BKOPS_EN];
 			card->ext_csd.raw_bkops_status =
 				ext_csd[EXT_CSD_BKOPS_STATUS];
-			if (!(card->host->caps2 & MMC_CAP2_INIT_BKOPS)) {
-				card->ext_csd.bkops_en = 0;
-			} else if (!card->ext_csd.bkops_en) {
+			if (!card->ext_csd.bkops_en &&
+				card->host->caps2 & MMC_CAP2_INIT_BKOPS) {
 				err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
 					EXT_CSD_BKOPS_EN, 1, 0);
 				if (err)
@@ -578,9 +577,6 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 				else
 					card->ext_csd.bkops_en = 1;
 			}
-			if (!card->ext_csd.bkops_en)
-				pr_info("%s: BKOPS_EN bit is not set\n",
-					mmc_hostname(card->host));
 		}
 
 		pr_info("%s: BKOPS_EN bit = %d\n",
@@ -1729,29 +1725,15 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		}
 	}
 
-	/* if it is from resume. check bkops mode */
-	if (oldcard) {
-		if (oldcard->bkops_enable & 0xFE) {
-			/*
-			 * if bkops mode is enable before getting suspend.
-			 * turn on the bkops mode
-			 */
-			mmc_bkops_enable(oldcard->host, oldcard->bkops_enable);
-		}
-	}
-
 	if (!oldcard)
 		host->card = card;
 
-	mmc_free_ext_csd(ext_csd);
 	return 0;
 
 free_card:
 	if (!oldcard)
 		mmc_remove_card(card);
 err:
-	mmc_free_ext_csd(ext_csd);
-
 	return err;
 }
 

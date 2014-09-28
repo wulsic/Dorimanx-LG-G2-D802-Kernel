@@ -63,8 +63,6 @@ struct mmc_ios {
 #define MMC_TIMING_MMC_HS200	6
 #define MMC_TIMING_MMC_HS400	7
 
-	unsigned char	ddr;			/* dual data rate used */
-
 #define MMC_SDR_MODE		0
 #define MMC_1_2V_DDR_MODE	1
 #define MMC_1_8V_DDR_MODE	2
