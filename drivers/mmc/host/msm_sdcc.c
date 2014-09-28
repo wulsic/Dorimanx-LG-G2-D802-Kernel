@@ -5,6 +5,7 @@
  *  Copyright (C) 2003 Deep Blue Solutions, Ltd, All Rights Reserved.
  *  Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
  *
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
@@ -1255,8 +1256,8 @@ msmsdcc_start_command_deferred(struct msmsdcc_host *host,
 
 	/* Check if AUTO CMD19/CMD21 is required or not? */
 	if (host->tuning_needed && (cmd->mrq->data &&
-		(cmd->mrq->data->flags & MMC_DATA_READ)) &&
-		(host->en_auto_cmd19 || host->en_auto_cmd21)) {
+	    (cmd->mrq->data->flags & MMC_DATA_READ)) &&
+	    (host->en_auto_cmd19 || host->en_auto_cmd21)) {
 		/*
 		 * For open ended block read operation (without CMD23),
 		 * AUTO_CMD19/AUTO_CMD21 bit should be set while sending
@@ -1473,12 +1474,11 @@ msmsdcc_data_err(struct msmsdcc_host *host, struct mmc_data *data,
 			else
 				data->error = -ETIMEDOUT;
 		}
-
 		/* In case of DATA CRC/timeout error, execute tuning again */
 #if defined (CONFIG_BCM4335)||defined (CONFIG_BCM4335_MODULE)
-		if (host->tuning_needed&&!host->tuning_in_progress&&(host->pdev_id!=3))
+		if (host->tuning_needed && !host->tuning_in_progress&&(host->pdev_id != 3))
 #else
-		if (host->tuning_needed&&!host->tuning_in_progress)
+		if (host->tuning_needed && !host->tuning_in_progress)
 #endif
 			host->tuning_done = false;
 
@@ -1690,7 +1690,7 @@ static void msmsdcc_sg_stop(struct msmsdcc_host *host)
 static inline void msmsdcc_clear_pio_irq_mask(struct msmsdcc_host *host)
 {
 	writel_relaxed(readl_relaxed(host->base + MMCIMASK0) & ~MCI_IRQ_PIO,
-		host->base + MMCIMASK0);
+			host->base + MMCIMASK0);
 	mb();
 }
 
@@ -1764,8 +1764,8 @@ msmsdcc_pio_irq(int irq, void *dev_id)
 
 	if (status & MCI_RXACTIVE && host->curr.xfer_remain < MCI_FIFOSIZE) {
 		writel_relaxed((readl_relaxed(host->base + MMCIMASK0) &
-				~MCI_IRQ_PIO) | MCI_RXDATAAVLBLMASK,
-				host->base + MMCIMASK0);
+					~MCI_IRQ_PIO) | MCI_RXDATAAVLBLMASK,
+					host->base + MMCIMASK0);
 		mb();
 	}
 
@@ -2024,7 +2024,6 @@ msmsdcc_irq(int irq, void *dev_id)
 		 * Check for proper command response
 		 */
 		cmd = host->curr.cmd;
-
 		if ((status & (MCI_CMDSENT | MCI_CMDRESPEND | MCI_CMDCRCFAIL |
 			MCI_CMDTIMEOUT | MCI_PROGDONE |
 			MCI_AUTOCMD19TIMEOUT)) && host->curr.cmd) {
@@ -2294,18 +2293,19 @@ msmsdcc_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	}
 
 	/*
-	 * Check if DLL retuning is required? if yes, perform it here before
+	 * Check if DLL retuning is required? If yes, perform it here before
 	 * starting new request.
 	 */
 	if (host->tuning_needed && !host->tuning_in_progress &&
-		!host->tuning_done) {
+	    !host->tuning_done) {
 		pr_debug("%s: %s: execute_tuning for timing mode = %d\n",
-			mmc_hostname(mmc), __func__, host->mmc->ios.timing);
-
+			 mmc_hostname(mmc), __func__, host->mmc->ios.timing);
 		if (host->mmc->ios.timing == MMC_TIMING_UHS_SDR104)
-			msmsdcc_execute_tuning(mmc, MMC_SEND_TUNING_BLOCK);
+			msmsdcc_execute_tuning(mmc,
+					       MMC_SEND_TUNING_BLOCK);
 		else if (host->mmc->ios.timing == MMC_TIMING_MMC_HS200)
-			msmsdcc_execute_tuning(mmc, MMC_SEND_TUNING_BLOCK_HS200);
+			msmsdcc_execute_tuning(mmc,
+					       MMC_SEND_TUNING_BLOCK_HS200);
 	}
 
 	if (host->eject) {
@@ -3527,10 +3527,7 @@ msmsdcc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		/* Card clock frequency must be > 100MHz to enable tuning */
 		clk |= (4 << 14);
 		host->tuning_needed = 1;
-/*	} else if (ios->timing == MMC_TIMING_UHS_DDR50) {
-		clk |= (3 << 14); */
 	} else {
-/*		clk |= (2 << 14);*/ /* feedback clock */
 		if (ios->timing == MMC_TIMING_UHS_DDR50)
 			clk |= (3 << 14);
 		else
@@ -6063,6 +6060,7 @@ msmsdcc_probe(struct platform_device *pdev)
 
 	set_default_hw_caps(host);
 	host->saved_tuning_phase = INVALID_TUNING_PHASE;
+
 	/*
 	 * Set the register write delay according to min. clock frequency
 	 * supported and update later when the host->clk_rate changes.
