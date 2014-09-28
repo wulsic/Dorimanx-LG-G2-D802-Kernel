@@ -4,7 +4,7 @@
  *  Copyright (C) 2003 Russell King, All Rights Reserved.
  *  Copyright (C) 2007-2008 Pierre Ossman
  *  Copyright (C) 2010 Linus Walleij
- *  Copyright (c) 2012, The Linux Foundation. All rights reserved.
+ *  Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -21,6 +21,7 @@
 #include <linux/leds.h>
 #include <linux/slab.h>
 #include <linux/suspend.h>
+#include <linux/pm_runtime.h>
 
 #include <linux/mmc/host.h>
 #include <linux/mmc/card.h>
@@ -37,9 +38,110 @@ static void mmc_host_classdev_release(struct device *dev)
 	kfree(host);
 }
 
+static int mmc_host_runtime_suspend(struct device *dev)
+{
+	struct mmc_host *host = cls_dev_to_mmc_host(dev);
+	int ret = 0;
+
+	if (!mmc_use_core_runtime_pm(host))
+		return 0;
+
+	ret = mmc_suspend_host(host);
+	if (ret < 0)
+		pr_err("%s: %s: suspend host failed: %d\n", mmc_hostname(host),
+		       __func__, ret);
+
+	return ret;
+}
+
+static int mmc_host_runtime_resume(struct device *dev)
+{
+	struct mmc_host *host = cls_dev_to_mmc_host(dev);
+	int ret = 0;
+
+	if (!mmc_use_core_runtime_pm(host))
+		return 0;
+
+	ret = mmc_resume_host(host);
+	if (ret < 0) {
+		pr_err("%s: %s: resume host: failed: ret: %d\n",
+		       mmc_hostname(host), __func__, ret);
+		if (pm_runtime_suspended(dev))
+			BUG_ON(1);
+	}
+
+	return ret;
+}
+
+static int mmc_host_suspend(struct device *dev)
+{
+	struct mmc_host *host = cls_dev_to_mmc_host(dev);
+	int ret = 0;
+	unsigned long flags;
+
+	if (!mmc_use_core_pm(host))
+		return 0;
+
+	spin_lock_irqsave(&host->clk_lock, flags);
+	/*
+	 * let the driver know that suspend is in progress and must
+	 * be aborted on receiving a sdio card interrupt
+	 */
+	host->dev_status = DEV_SUSPENDING;
+	spin_unlock_irqrestore(&host->clk_lock, flags);
+	if (!pm_runtime_suspended(dev)) {
+		ret = mmc_suspend_host(host);
+		if (ret < 0)
+			pr_err("%s: %s: failed: ret: %d\n", mmc_hostname(host),
+			       __func__, ret);
+	}
+	/*
+	 * If SDIO function driver doesn't want to power off the card,
+	 * atleast turn off clocks to allow deep sleep.
+	 */
+	if (!ret && host->card && mmc_card_sdio(host->card) &&
+	    host->ios.clock) {
+		spin_lock_irqsave(&host->clk_lock, flags);
+		host->clk_old = host->ios.clock;
+		host->ios.clock = 0;
+		host->clk_gated = true;
+		spin_unlock_irqrestore(&host->clk_lock, flags);
+		mmc_set_ios(host);
+	}
+	spin_lock_irqsave(&host->clk_lock, flags);
+	host->dev_status = DEV_SUSPENDED;
+	spin_unlock_irqrestore(&host->clk_lock, flags);
+	return ret;
+}
+
+static int mmc_host_resume(struct device *dev)
+{
+	struct mmc_host *host = cls_dev_to_mmc_host(dev);
+	int ret = 0;
+
+	if (!mmc_use_core_pm(host))
+		return 0;
+
+	if (!pm_runtime_suspended(dev)) {
+		ret = mmc_resume_host(host);
+		if (ret < 0)
+			pr_err("%s: %s: failed: ret: %d\n", mmc_hostname(host),
+			       __func__, ret);
+	}
+	host->dev_status = DEV_RESUMED;
+	return ret;
+}
+
+static const struct dev_pm_ops mmc_host_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(mmc_host_suspend, mmc_host_resume)
+	SET_RUNTIME_PM_OPS(mmc_host_runtime_suspend, mmc_host_runtime_resume,
+			   pm_generic_runtime_idle)
+};
+
 static struct class mmc_host_class = {
 	.name		= "mmc_host",
 	.dev_release	= mmc_host_classdev_release,
+	.pm		= &mmc_host_pm_ops,
 };
 
 int mmc_register_host_class(void)
@@ -60,8 +162,7 @@ static ssize_t clkgate_delay_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct mmc_host *host = cls_dev_to_mmc_host(dev);
-	return snprintf(buf, PAGE_SIZE, "%lu\n",
-			host->clkgate_delay);
+	return snprintf(buf, PAGE_SIZE, "%lu\n", host->clkgate_delay);
 }
 
 static ssize_t clkgate_delay_store(struct device *dev,
@@ -76,9 +177,6 @@ static ssize_t clkgate_delay_store(struct device *dev,
 	spin_lock_irqsave(&host->clk_lock, flags);
 	host->clkgate_delay = value;
 	spin_unlock_irqrestore(&host->clk_lock, flags);
-
-	pr_info("%s: clock gate delay set to %lu ms\n",
-			mmc_hostname(host), value);
 	return count;
 }
 
@@ -180,11 +278,19 @@ void mmc_host_clk_hold(struct mmc_host *host)
  *	mmc_host_may_gate_card - check if this card may be gated
  *	@card: card to check.
  */
-static bool mmc_host_may_gate_card(struct mmc_card *card)
+bool mmc_host_may_gate_card(struct mmc_card *card)
 {
 	/* If there is no card we may gate it */
 	if (!card)
 		return true;
+
+	/*
+	 * SDIO3.0 card allows the clock to be gated off so check if
+	 * that is the case or not.
+	 */
+	if (mmc_card_sdio(card) && card->cccr.async_intr_sup)
+		return true;
+
 	/*
 	 * Don't gate SDIO cards! These need to be clocked at all times
 	 * since they may be independent systems generating interrupts
@@ -605,10 +711,20 @@ int mmc_add_host(struct mmc_host *host)
 	WARN_ON((host->caps & MMC_CAP_SDIO_IRQ) &&
 		!host->ops->enable_sdio_irq);
 
+	err = pm_runtime_set_active(&host->class_dev);
+	if (err)
+		pr_err("%s: %s: failed setting runtime active: err: %d\n",
+		       mmc_hostname(host), __func__, err);
+	else if (mmc_use_core_runtime_pm(host))
+		pm_runtime_enable(&host->class_dev);
+
 	err = device_add(&host->class_dev);
 	if (err)
 		return err;
 
+#ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
+	device_enable_async_suspend(&host->class_dev);
+#endif
 	led_trigger_register_simple(dev_name(&host->class_dev), &host->led);
 
 #ifdef CONFIG_DEBUG_FS

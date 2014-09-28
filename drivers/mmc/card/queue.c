@@ -58,7 +58,6 @@ static int mmc_queue_thread(void *d)
 {
 	struct mmc_queue *mq = d;
 	struct request_queue *q = mq->queue;
-	struct request *req;
 	struct mmc_card *card = mq->card;
 
 	current->flags |= PF_MEMALLOC;
@@ -66,7 +65,7 @@ static int mmc_queue_thread(void *d)
 	down(&mq->thread_sem);
 	do {
 		struct mmc_queue_req *tmp;
-		req = NULL;	/* Must be set to NULL at each iteration */
+		struct request *req = NULL;
 
 		spin_lock_irq(q->queue_lock);
 		set_current_state(TASK_INTERRUPTIBLE);
@@ -291,8 +290,9 @@ int mmc_init_queue(struct mmc_queue *mq, struct mmc_card *card,
 	mq->mqrq_cur = mqrq_cur;
 	mq->mqrq_prev = mqrq_prev;
 	mq->queue->queuedata = mq;
-	mq->nopacked_period = 0;
-	mq->num_wr_reqs_to_start_packing = DEFAULT_NUM_REQS_TO_START_PACK;
+	mq->num_wr_reqs_to_start_packing =
+		min_t(int, (int)card->ext_csd.max_packed_writes,
+		     DEFAULT_NUM_REQS_TO_START_PACK);
 
 	blk_queue_prep_rq(mq->queue, mmc_prep_request);
 	queue_flag_set_unlocked(QUEUE_FLAG_NONROT, mq->queue);
