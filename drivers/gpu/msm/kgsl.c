@@ -808,7 +808,8 @@ const struct dev_pm_ops kgsl_pm_ops = {
 };
 EXPORT_SYMBOL(kgsl_pm_ops);
 
-void kgsl_early_suspend_driver(struct power_suspend *h)
+#ifdef CONFIG_HAS_EARLYSUSPEND
+void kgsl_early_suspend_driver(struct early_suspend *h)
 {
 	struct kgsl_device *device = container_of(h,
 					struct kgsl_device, display_off);
@@ -826,6 +827,7 @@ void kgsl_early_suspend_driver(struct power_suspend *h)
 	KGSL_PWR_WARN(device, "early suspend end\n");
 }
 EXPORT_SYMBOL(kgsl_early_suspend_driver);
+#endif
 
 int kgsl_suspend_driver(struct platform_device *pdev,
 					pm_message_t state)
@@ -842,7 +844,8 @@ int kgsl_resume_driver(struct platform_device *pdev)
 }
 EXPORT_SYMBOL(kgsl_resume_driver);
 
-void kgsl_late_resume_driver(struct power_suspend *h)
+#ifdef CONFIG_HAS_EARLYSUSPEND
+void kgsl_late_resume_driver(struct early_suspend *h)
 {
 	struct kgsl_device *device = container_of(h,
 					struct kgsl_device, display_off);
@@ -875,6 +878,7 @@ void kgsl_late_resume_driver(struct power_suspend *h)
 	KGSL_PWR_WARN(device, "late resume end\n");
 }
 EXPORT_SYMBOL(kgsl_late_resume_driver);
+#endif
 
 /*
  * kgsl_destroy_process_private() - Cleanup function to free process private
