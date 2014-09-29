@@ -4359,11 +4359,11 @@ retry:
 			if (!is_tuning_all_phases)
 				goto kfree;
 			tuned_phases[tuned_phase_cnt++] = phase;
-			pr_err("%s: %s: found good phase = %d\n",
+			pr_debug("%s: %s: found good phase = %d\n",
 				mmc_hostname(mmc), __func__, phase);
 		} else if (!is_tuning_all_phases) {
 			pr_debug("%s: tuning failed at saved phase (%d), retrying\n",
-				mmc_hostname(mmc), (u32)phase);
+					mmc_hostname(mmc), (u32)phase);
 			is_tuning_all_phases = true;
 			goto retry;
 		}
@@ -4386,7 +4386,7 @@ retry:
 			goto kfree;
 		else
 			host->saved_tuning_phase = phase;
-		pr_err("%s: %s: finally setting the tuning phase to %d\n",
+		pr_debug("%s: %s: finally setting the tuning phase to %d\n",
 				mmc_hostname(mmc), __func__, phase);
 	} else {
 		/* tuning failed */
