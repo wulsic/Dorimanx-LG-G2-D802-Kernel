@@ -201,7 +201,7 @@ static inline unsigned short msmsdcc_get_nr_sg(struct msmsdcc_host *host)
 	unsigned short ret = NR_SG;
 
 	if (is_sps_mode(host)) {
-		ret = SPS_MAX_DESCS / 32;
+		ret = SPS_MAX_DESCS;
 	} else { /* DMA or PIO mode */
 		if (NR_SG > MAX_NR_SG_DMA_PIO)
 			ret = MAX_NR_SG_DMA_PIO;
@@ -499,10 +499,6 @@ static void msmsdcc_reset_dpsm(struct msmsdcc_host *host)
 	if (is_wait_for_tx_rx_active(host)) {
 		ktime_t start = ktime_get();
 
-		writel_relaxed(readl_relaxed(host->base + MMCICLOCK)
-			| (1 << 17), host->base + MMCICLOCK);
-		msmsdcc_sync_reg_wr(host);
-
 		while (readl_relaxed(host->base + MMCISTATUS) &
 				(MCI_TXACTIVE | MCI_RXACTIVE)) {
 			/*
@@ -518,14 +514,9 @@ static void msmsdcc_reset_dpsm(struct msmsdcc_host *host)
 					& MCI_TXACTIVE ? "TX" : "RX");
 				msmsdcc_dump_sdcc_state(host);
 				msmsdcc_reset_and_restore(host);
-				host->pending_dpsm_reset = false;
 				goto out;
 			}
 		}
-		writel_relaxed(readl_relaxed(host->base + MMCICLOCK)
-				& ~(1 << 17), host->base + MMCICLOCK);
-		msmsdcc_sync_reg_wr(host);
-
 	}
 
 no_polling:
@@ -2600,6 +2591,8 @@ static int msmsdcc_setup_vreg(struct msmsdcc_host *host, bool enable,
 
 	curr_slot = host->plat->vreg_data;
 	if (!curr_slot) {
+		pr_debug("%s: vreg info unavailable, assuming the slot is powered by always on domain\n",
+			 mmc_hostname(host->mmc));
 		rc = -EINVAL;
 		goto out;
 	}
@@ -6569,7 +6562,7 @@ static void msmsdcc_remove_debugfs(struct msmsdcc_host *host)
 	host->debugfs_host_dir = NULL;
 }
 #else
-static void msmsdcc_remove_debugfs(msmsdcc_host *host) {}
+static void msmsdcc_remove_debugfs(struct msmsdcc_host *host) {}
 #endif
 
 static int msmsdcc_remove(struct platform_device *pdev)

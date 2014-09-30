@@ -416,7 +416,6 @@ struct msmsdcc_host {
 	struct mutex clk_mutex;
 	bool pending_resume;
 	unsigned int idle_tout;			/* Timeout in msecs */
-	bool pending_dpsm_reset;
 	bool enforce_pio_mode;
 	bool print_pm_stats;
 	struct msmsdcc_msm_bus_vote msm_bus_vote;
@@ -496,9 +495,9 @@ static inline void set_default_hw_caps(struct msmsdcc_host *host)
 			| MSMSDCC_AUTO_CMD19;
 
 	if ((step == 0x18) && (minor >= 3)) {
+		host->hw_caps |= MSMSDCC_AUTO_CMD21;
 		/* Version 0x06000018 need hard reset on errors */
 		host->hw_caps &= ~MSMSDCC_SOFT_RESET;
-		host->hw_caps |= MSMSDCC_AUTO_CMD21;
 	}
 
 	if (step >= 0x2b) /* SDCC v4 2.1.0 and greater */
