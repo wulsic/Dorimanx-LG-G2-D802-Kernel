@@ -70,9 +70,6 @@ static int mmc_queue_thread(void *d)
 		spin_lock_irq(q->queue_lock);
 		set_current_state(TASK_INTERRUPTIBLE);
 		req = blk_fetch_request(q);
-		/* set nopacked_period if next request is RT class */
-		if (req && IS_RT_CLASS_REQ(req))
-			    mmc_set_nopacked_period(mq, HZ);
 		mq->mqrq_cur->req = req;
 		spin_unlock_irq(q->queue_lock);
 
@@ -133,7 +130,6 @@ static void mmc_request(struct request_queue *q)
 	struct request *req;
 	unsigned long flags;
 	struct mmc_context_info *cntx;
-	struct io_context *ioc;
 
 	if (!mq) {
 		while ((req = blk_fetch_request(q)) != NULL) {
@@ -141,14 +137,6 @@ static void mmc_request(struct request_queue *q)
 			__blk_end_request_all(req, -EIO);
 		}
 		return;
-	}
-
-	ioc = get_task_io_context(current, GFP_NOWAIT, 0);
-	if (ioc) {
-	    /* Set nopacked period if requesting process is RT class */
-	    if (IOPRIO_PRIO_CLASS(ioc->ioprio) == IOPRIO_CLASS_RT)
-	        mmc_set_nopacked_period(mq, HZ);
-	    put_io_context(ioc);
 	}
 
 	cntx = &mq->card->host->context_info;
