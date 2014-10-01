@@ -626,7 +626,9 @@ static int mipi_samsung_disp_on(struct platform_device *pdev)
 #endif
 
 #ifdef CONFIG_POWERSUSPEND
-	set_power_suspend_state_panel_hook(POWER_SUSPEND_INACTIVE);
+	if (suspend_mode == 2)
+		set_power_suspend_state_panel_hook(
+			POWER_SUSPEND_INACTIVE);
 #endif
 
 	return 0;
@@ -685,7 +687,9 @@ static int mipi_samsung_disp_off(struct platform_device *pdev)
 #endif
 
 #ifdef CONFIG_POWERSUSPEND
-	set_power_suspend_state_panel_hook(POWER_SUSPEND_ACTIVE);
+	if (suspend_mode == 2)
+		set_power_suspend_state_panel_hook(
+			POWER_SUSPEND_ACTIVE);
 #endif
 
 	return 0;
