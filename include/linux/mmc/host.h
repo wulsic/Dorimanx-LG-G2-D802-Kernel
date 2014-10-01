@@ -298,7 +298,6 @@ struct mmc_host {
 #define MMC_CAP2_SANITIZE	(1 << 15)		/* Support Sanitize */
 #define MMC_CAP2_INIT_BKOPS	    (1 << 16)	/* Need to set BKOPS_EN */
 #define MMC_CAP2_CLK_SCALE	(1 << 17)	/* Allow dynamic clk scaling */
-#define MMC_CAP2_ADAPT_PACKED	(1 << 17) 	/*  Disable packed write adaptively */
 #define MMC_CAP2_STOP_REQUEST	(1 << 18)	/* Allow stop ongoing request */
 /* Use runtime PM framework provided by MMC core */
 #define MMC_CAP2_CORE_RUNTIME_PM (1 << 19)
