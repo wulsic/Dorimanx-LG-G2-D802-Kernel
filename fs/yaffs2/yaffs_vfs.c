@@ -1107,7 +1107,7 @@ static void yaffs_evict_inode(struct inode *inode)
 	if (!inode->i_nlink && !is_bad_inode(inode))
 		deleteme = 1;
 	truncate_inode_pages(&inode->i_data, 0);
-	clear_inode(inode);
+	end_writeback(inode);
 
 	if (deleteme && obj) {
 		dev = obj->my_dev;

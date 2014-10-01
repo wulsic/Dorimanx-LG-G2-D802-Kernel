@@ -283,6 +283,12 @@ endif # NETWORK_FILESYSTEMS
 source "fs/nls/Kconfig"
 source "fs/dlm/Kconfig"
 
+config AIO_OPTIMIZATION
+	bool "AIO kernel optimization patches"
+	default y
+	help
+ 	  An experimental AIO FS kernel optimization
+
 config RESTRICT_ROOTFS_SLAVE
 	bool "Android: Restrict rootfs slave mountspace to /storage"
 	help
@@ -312,9 +318,4 @@ config ASYNC_FSYNC
 	bool "asynchronous fsync"
 	default y
 
-config AIO_OPTIMIZATION
-	bool "AIO kernel optimization patches"
-	default y
-	help
-	  An experimental AIO FS kernel optimization
 endmenu

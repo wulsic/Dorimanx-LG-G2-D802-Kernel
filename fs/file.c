@@ -202,17 +202,13 @@ static int expand_fdtable(struct files_struct *files, int nr)
 	new_fdt = alloc_fdtable(nr);
 	spin_lock(&files->file_lock);
 	if (!new_fdt)
-	{
-		printk("[expand_fdtable] ENOMEM: !new_fdt\n");
 		return -ENOMEM;
-	}
 	/*
 	 * extremely unlikely race - sysctl_nr_open decreased between the check in
 	 * caller and alloc_fdtable().  Cheaper to catch it here...
 	 */
 	if (unlikely(new_fdt->max_fds <= nr)) {
 		__free_fdtable(new_fdt);
-		printk("[expand_fdtable] EMFILE : unlikely(new_fdt->max_fds <= nr\n)"); 
 		return -EMFILE;
 	}
 	/*
@@ -253,10 +249,7 @@ int expand_files(struct files_struct *files, int nr)
 
 	/* Can we expand? */
 	if (nr >= sysctl_nr_open)
-	{
-		printk("[expand_files] EMFILE : nr >= sysctl_nr_open\n");
 		return -EMFILE;
-	}
 
 	/* All good, so we try */
 	return expand_fdtable(files, nr);
@@ -553,8 +546,6 @@ repeat:
 	else
 		__clear_close_on_exec(fd, fdt);
 	error = fd;
-	if (error < 0)
-		printk("[alloc_fd] fd < 0\n");
 #if 1
 	/* Sanity check */
 	if (rcu_dereference_raw(fdt->fd[fd]) != NULL) {
@@ -567,6 +558,7 @@ out:
 	spin_unlock(&files->file_lock);
 	return error;
 }
+EXPORT_SYMBOL(alloc_fd);
 
 int alloc_fd(unsigned start, unsigned flags)
 {
