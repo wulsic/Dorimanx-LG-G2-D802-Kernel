@@ -58,6 +58,7 @@ static sec_charging_current_t charging_current_table[] = {
 	{1900,	1600,	200,	40*60},
 	{0,	0,	0,	0},
 	{0,	0,	0,	0},
+	{460,	0,	0,	0},
 };
 
 static bool sec_bat_adc_none_init(
@@ -184,9 +185,15 @@ static void sec_bat_initial_check(void)
 	union power_supply_propval value;
 
 	if (POWER_SUPPLY_TYPE_BATTERY < current_cable_type) {
-		value.intval = current_cable_type<<ONLINE_TYPE_MAIN_SHIFT;
-		psy_do_property("battery", set,
-				POWER_SUPPLY_PROP_ONLINE, value);
+		if (current_cable_type == POWER_SUPPLY_TYPE_POWER_SHARING) {
+			value.intval = current_cable_type;
+			psy_do_property("ps", set,
+					POWER_SUPPLY_PROP_ONLINE, value);
+		} else {
+			value.intval = current_cable_type<<ONLINE_TYPE_MAIN_SHIFT;
+			psy_do_property("battery", set,
+					POWER_SUPPLY_PROP_ONLINE, value);
+		}
 	} else {
 		psy_do_property("sec-charger", get,
 				POWER_SUPPLY_PROP_ONLINE, value);
@@ -388,6 +395,14 @@ static bool sec_bat_check_cable_result_callback(
 
 	if(system_rev >= 0x8)
 	{
+#ifdef CONFIG_SAMSUNG_BATTERY_FACTORY
+		pr_info("%s set ldo on\n", __func__);
+		l29 = regulator_get(NULL, "8921_l29");
+		if(l29 > 0)
+		{
+			regulator_enable(l29);
+		}
+#else
 		if (current_cable_type == POWER_SUPPLY_TYPE_BATTERY)
 		{
 			pr_info("%s set ldo off\n", __func__);
@@ -406,6 +421,7 @@ static bool sec_bat_check_cable_result_callback(
 				regulator_enable(l29);
 			}
 		}
+#endif
 	}
 	return true;
 }
@@ -476,6 +492,10 @@ static bool sec_fg_fuelalert_process(bool is_fuel_alerted) {return true; }
 
 #if defined(CONFIG_MACH_JF_DCM)
 static const sec_bat_adc_table_data_t temp_table[] = {
+	{25893,	900},
+	{26142,	850},
+	{26427,	800},
+	{26792,	750},
 	{27120,	700},
 	{27585,	650},
 	{28110,	600},
@@ -499,6 +519,10 @@ static const sec_bat_adc_table_data_t temp_table[] = {
 };
 #elif defined(CONFIG_MACH_JACTIVE_ATT)
 static const sec_bat_adc_table_data_t temp_table[] = {
+	{25893,	900},
+	{26142,	850},
+	{26427,	800},
+	{26792,	750},
 	{27039,	700},
 	{27264,	670},
 	{27435,	650},
@@ -527,6 +551,10 @@ static const sec_bat_adc_table_data_t temp_table[] = {
 };
 #else
 static const sec_bat_adc_table_data_t temp_table[] = {
+	{25893,	900},
+	{26142,	850},
+	{26427,	800},
+	{26792,	750},
 	{27188,	700},
 	{27605,	650},
 	{28182,	600},
@@ -754,7 +782,7 @@ sec_battery_platform_data_t sec_battery_pdata = {
 	.temp_low_threshold_normal = -30,
 	.temp_low_recovery_normal = 0,
 
-	.temp_high_threshold_lpm = 500,
+	.temp_high_threshold_lpm = 470,
 	.temp_high_recovery_lpm = 430,
 	.temp_low_threshold_lpm = -30,
 	.temp_low_recovery_lpm = 0,
