@@ -753,7 +753,6 @@ static int sec_chg_set_property(struct power_supply *psy,
 		POWER_SUPPLY_TYPE_USB].fast_charging_current;
 	const int wpc_charging_current = charger->pdata->charging_current[
 		POWER_SUPPLY_TYPE_WIRELESS].input_current_limit;
-	u8 chg_cnfg_00;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
@@ -763,24 +762,6 @@ static int sec_chg_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_ONLINE:
 		/* check and unlock */
 		check_charger_unlock_state(charger);
-
-		if (val->intval == POWER_SUPPLY_TYPE_POWER_SHARING) {
-			psy_do_property("ps", get,
-					POWER_SUPPLY_PROP_STATUS, value);
-			chg_cnfg_00 = CHG_CNFG_00_OTG_MASK
-				| CHG_CNFG_00_BOOST_MASK
-				| CHG_CNFG_00_DIS_MUIC_CTRL_MASK;
-			if (value.intval) {
-				max77693_update_reg(charger->max77693->i2c, MAX77693_CHG_REG_CHG_CNFG_00,
-						chg_cnfg_00, chg_cnfg_00);
-				pr_info("%s: ps enable\n", __func__);
-			} else {
-				max77693_update_reg(charger->max77693->i2c, MAX77693_CHG_REG_CHG_CNFG_00,
-						0, chg_cnfg_00);
-				pr_info("%s: ps disable\n", __func__);
-			}
-			break;
-		}
 		charger->cable_type = val->intval;
 		psy_do_property("battery", get,
 				POWER_SUPPLY_PROP_HEALTH, value);
@@ -817,6 +798,7 @@ static int sec_chg_set_property(struct power_supply *psy,
 			if (set_charging_current > 0 &&
 					set_charging_current < usb_charging_current)
 				set_charging_current = usb_charging_current;
+
 			if (val->intval == POWER_SUPPLY_TYPE_WIRELESS)
 				set_charging_current_max = wpc_charging_current;
 			else
@@ -1119,7 +1101,7 @@ static void wpc_detect_work(struct work_struct *work)
 				POWER_SUPPLY_PROP_ONLINE, value);
 		pr_info("%s: wpc activated, set V_INT as PN\n",
 				__func__);
-	} else if (wc_w_state == 0) {
+	} else if ((chg_data->wc_w_state == 1) && (wc_w_state == 0)) {
 		if (!chg_data->is_charging)
 			max77693_set_charger_state(chg_data, true);
 		max77693_read_reg(chg_data->max77693->i2c,

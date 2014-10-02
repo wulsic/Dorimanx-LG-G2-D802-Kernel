@@ -30,9 +30,6 @@
 
 #include <linux/regulator/consumer.h>
 #include <linux/battery/sec_charger.h>
-#if defined (CONFIG_SEC_PRODUCT_8930)
-#include <linux/battery/charger/max77693_charger.h>
-#endif
 
 enum {
 	MAX77693_MUIC_DETACHED = 0,
@@ -124,11 +121,7 @@ struct max77693_muic_data {
 	int (*charger_cb) (enum cable_type_muic);
 	void (*deskdock_cb) (bool attached);
 	void (*cardock_cb) (bool attached);
-#if defined(CONFIG_SEC_PRODUCT_8930)
-	void (*smartdock_cb) (bool attached, u8 cable_type);
-#else
 	void (*smartdock_cb) (bool attached);
-#endif
 	void (*audiodock_cb) (bool attached);
 	void (*mhl_cb) (int attached);
 	void (*init_cb) (void);

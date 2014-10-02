@@ -45,7 +45,6 @@ struct sec_battery_info {
 	struct power_supply psy_bat;
 	struct power_supply psy_usb;
 	struct power_supply psy_ac;
-	struct power_supply psy_ps;
 	unsigned int irq;
 
 	int status;
@@ -68,9 +67,6 @@ struct sec_battery_info {
 	struct wake_lock monitor_wake_lock;
 	struct workqueue_struct *monitor_wqueue;
 	struct work_struct monitor_work;
-#ifdef CONFIG_SAMSUNG_BATTERY_FACTORY
-	struct wake_lock lpm_wake_lock;
-#endif
 	unsigned int polling_count;
 	unsigned int polling_time;
 	bool polling_in_sleep;
@@ -128,11 +124,6 @@ struct sec_battery_info {
 	/* wireless charging enable */
 	int wc_enable;
 
-	/* wearable charging */
-	int ps_enable;
-	int ps_status;
-	int ps_changed;
-
 	/* test mode */
 	int test_activated;
 	bool factory_mode;
@@ -141,7 +132,6 @@ struct sec_battery_info {
 	int siop_level;
 #if defined(CONFIG_SAMSUNG_BATTERY_ENG_TEST)
 	int stability_test;
-	int eng_not_full_status;
 #endif
 };
 
