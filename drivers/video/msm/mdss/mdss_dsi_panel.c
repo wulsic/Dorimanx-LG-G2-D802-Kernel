@@ -1129,9 +1129,14 @@ static int write_local_on_cmds(struct device *dev, const char *buf,
 		}
 
 		local_ctrl->on_cmds.cmds[cmd].payload[i] = val;
-		/* White point value must be duplicated */
+		/*
+		 * Duplicate positive/negative polarities for both,
+		 * white point and RGB values.
+		 */
 		if (cmd == 5)
 			local_ctrl->on_cmds.cmds[cmd].payload[i + 1] = val;
+		else
+			local_ctrl->on_cmds.cmds[cmd + 2].payload[i] = val;
 
 		sscanf(buf, "%s", tmp);
 		buf += strlen(tmp) + 1;
@@ -1181,54 +1186,67 @@ static ssize_t write_kgamma_send(struct device *dev,
 
 static DEVICE_ATTR(kgamma_send, 0644, NULL, write_kgamma_send);
 
-#define read_one(file_name, cmd)				\
-static ssize_t read_##file_name					\
-(struct device *dev, struct device_attribute *attr, char *buf)  \
-{								\
-	return read_local_on_cmds(buf, cmd);			\
+#define read_one(file_name, cmd)					\
+static ssize_t read_##file_name						\
+(struct device *dev, struct device_attribute *attr, char *buf)  	\
+{									\
+	return read_local_on_cmds(buf, cmd % 2 ? cmd : cmd - 1);	\
 }
 
 read_one(kgamma_w,   5);
+read_one(kgamma_r,   7);
 read_one(kgamma_rp,  7);
-read_one(kgamma_rn,  9);
+read_one(kgamma_rn,  8);
+read_one(kgamma_g,  11);
 read_one(kgamma_gp, 11);
-read_one(kgamma_gn, 13);
+read_one(kgamma_gn, 12);
+read_one(kgamma_b,  15);
 read_one(kgamma_bp, 15);
-read_one(kgamma_bn, 17);
+read_one(kgamma_bn, 16);
 
-#define write_one(file_name, cmd)				\
-static ssize_t write_##file_name				\
-(struct device *dev, struct device_attribute *attr, 		\
-		const char *buf, size_t count)  		\
-{								\
-	return write_local_on_cmds(dev, buf, cmd, count);	\
+#define write_one(file_name, cmd)					\
+static ssize_t write_##file_name					\
+(struct device *dev, struct device_attribute *attr, 			\
+		const char *buf, size_t count)  			\
+{									\
+	return write_local_on_cmds(dev, buf,				\
+				   cmd % 2 ? cmd : cmd - 1, count);	\
 }
 
 write_one(kgamma_w,   5);
+write_one(kgamma_r,   7);
 write_one(kgamma_rp,  7);
-write_one(kgamma_rn,  9);
+write_one(kgamma_rn,  8);
+write_one(kgamma_g,  11);
 write_one(kgamma_gp, 11);
-write_one(kgamma_gn, 13);
+write_one(kgamma_gn, 12);
+write_one(kgamma_b,  15);
 write_one(kgamma_bp, 15);
-write_one(kgamma_bn, 17);
+write_one(kgamma_bn, 16);
 
 #define define_one_rw(_name)					\
 static DEVICE_ATTR(_name, 0644, read_##_name, write_##_name);
 
 define_one_rw(kgamma_w);
+define_one_rw(kgamma_r);
 define_one_rw(kgamma_rp);
 define_one_rw(kgamma_rn);
+define_one_rw(kgamma_g);
 define_one_rw(kgamma_gp);
 define_one_rw(kgamma_gn);
+define_one_rw(kgamma_b);
 define_one_rw(kgamma_bp);
 define_one_rw(kgamma_bn);
 
 static struct attribute *dsi_panel_attributes[] = {
 	&dev_attr_kgamma_w.attr,
+	&dev_attr_kgamma_r.attr,
 	&dev_attr_kgamma_rp.attr,
 	&dev_attr_kgamma_rn.attr,
+	&dev_attr_kgamma_g.attr,
 	&dev_attr_kgamma_gp.attr,
 	&dev_attr_kgamma_gn.attr,
+	&dev_attr_kgamma_b.attr,
 	&dev_attr_kgamma_bp.attr,
 	&dev_attr_kgamma_bn.attr,
 	&dev_attr_kgamma_send.attr,
