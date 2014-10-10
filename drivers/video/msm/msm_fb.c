@@ -560,7 +560,7 @@ static int msm_fb_suspend(struct platform_device *pdev, pm_message_t state)
 		fb_set_suspend(mfd->fbi, FBINFO_STATE_RUNNING);
 	} else {
 		pdev->dev.power.power_state = state;
-#if defined(CONFIG_MACH_LGE)
+#ifdef CONFIG_LCD_NOTIFY
 		lcd_notifier_call_chain(LCD_EVENT_OFF_END, NULL);
 #endif
 #ifdef CONFIG_POWERSUSPEND
