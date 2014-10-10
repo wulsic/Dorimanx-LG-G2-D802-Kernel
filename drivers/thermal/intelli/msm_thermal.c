@@ -23,6 +23,7 @@
 #include <linux/msm_tsens.h>
 #include <linux/workqueue.h>
 #include <linux/cpu.h>
+#include <mach/cpufreq.h>
 #include <linux/cpufreq.h>
 #include <linux/msm_tsens.h>
 #include <linux/msm_thermal.h>
@@ -172,12 +173,17 @@ static struct notifier_block msm_thermal_cpufreq_notifier = {
 	.notifier_call = msm_thermal_cpufreq_callback,
 };
 
-static void update_cpu_freq(int cpu)
+static int update_cpu_max_freq(int cpu, uint32_t max_freq)
 {
-	if (cpu_online(cpu)) {
-		if (cpufreq_update_policy(cpu))
-			pr_err("Unable to update policy for cpu:%d\n", cpu);
-	}
+	int ret = 0;
+
+	ret = msm_cpufreq_set_freq_limits(cpu, MSM_CPUFREQ_NO_LIMIT, max_freq);
+	if (ret)
+		return ret;
+
+	ret = cpufreq_update_policy(cpu);
+
+	return ret;
 }
 
 static int msm_thermal_get_freq_table(void)
@@ -315,7 +321,7 @@ static void __ref do_freq_control(long temp)
 		if ((limit_idx >= limit_idx_high) ||
 				immediately_limit_stop == true) {
 			limit_idx = limit_idx_high;
-			max_freq = UINT_MAX;
+			max_freq = MSM_CPUFREQ_NO_LIMIT;
 		} else
 			max_freq = table[limit_idx].frequency;
 	}
@@ -354,7 +360,7 @@ static void __ref do_freq_control(long temp)
 		if (cpus[cpu].limited_min_freq > 960000)
 			cpus[cpu].limited_min_freq = 0;
 #endif
-		update_cpu_freq(cpu);
+		update_cpu_max_freq(cpu, max_freq);
 	}
 	put_online_cpus();
 }
@@ -472,12 +478,12 @@ static void __ref disable_msm_thermal(void)
 
 	get_online_cpus();
 	for_each_possible_cpu(cpu) {
-		if (cpus[cpu].limited_max_freq == UINT_MAX &&
+		if (cpus[cpu].limited_max_freq == MSM_CPUFREQ_NO_LIMIT &&
 				cpus[cpu].limited_min_freq == 0)
 			continue;
-		cpus[cpu].limited_max_freq = UINT_MAX;
+		cpus[cpu].limited_max_freq = MSM_CPUFREQ_NO_LIMIT;
 		cpus[cpu].limited_min_freq = 0;
-		update_cpu_freq(cpu);
+		update_cpu_max_freq(cpu, MSM_CPUFREQ_NO_LIMIT);
 	}
 	put_online_cpus();
 }
@@ -863,7 +869,7 @@ int __devinit msm_thermal_init(struct msm_thermal_data *pdata)
 
 	for_each_possible_cpu(cpu) {
 		cpus[cpu].cpu = cpu;
-		cpus[cpu].limited_max_freq = UINT_MAX;
+		cpus[cpu].limited_max_freq = MSM_CPUFREQ_NO_LIMIT;
 		cpus[cpu].limited_min_freq = 0;
 	}
 
