@@ -57,9 +57,6 @@
 #ifdef CONFIG_LCD_NOTIFY
 #include <linux/lcd_notify.h>
 #endif
-#ifdef CONFIG_POWERSUSPEND
-#include <linux/powersuspend.h>
-#endif
 
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MSM_FB_NUM	3
@@ -563,11 +560,6 @@ static int msm_fb_suspend(struct platform_device *pdev, pm_message_t state)
 #ifdef CONFIG_LCD_NOTIFY
 		lcd_notifier_call_chain(LCD_EVENT_OFF_END, NULL);
 #endif
-#ifdef CONFIG_POWERSUSPEND
-		if (suspend_mode == 2)
-			set_power_suspend_state_panel_hook(
-				POWER_SUSPEND_ACTIVE);
-#endif
 	}
 
 	console_unlock();
@@ -703,11 +695,6 @@ static int msm_fb_resume(struct platform_device *pdev)
 	fb_set_suspend(mfd->fbi, FBINFO_STATE_RUNNING);
 #ifdef CONFIG_LCD_NOTIFY
 	lcd_notifier_call_chain(LCD_EVENT_ON_END, NULL);
-#endif
-#ifdef CONFIG_POWERSUSPEND
-	if (suspend_mode == 2)
-		set_power_suspend_state_panel_hook(
-			POWER_SUSPEND_INACTIVE);
 #endif
 	console_unlock();
 
