@@ -216,10 +216,6 @@ static void __ref do_core_control(long temp)
 	if (!core_control)
 		return;
 
-	if (msm_thermal_info_local.limit_temp_degC <
-			msm_thermal_info_local.core_limit_temp_degC)
-		return;
-
 	/**
 	 *  Offline cores starting from the max MPIDR to 1, when above limit,
 	 *  The core control mask is non zero and allows the core to be turned
