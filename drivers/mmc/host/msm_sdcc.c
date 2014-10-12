@@ -6825,7 +6825,6 @@ msmsdcc_runtime_suspend(struct device *dev)
 
 #if defined(CONFIG_BCM4335) || defined(CONFIG_BCM4335_MODULE)
 	if (host->pdev->id == 3) {
-		host->mmc->pm_flags |= MMC_PM_KEEP_POWER;
 		printk(KERN_INFO "%s: Enter WIFI suspend\n", __func__);
 	}
 #endif
