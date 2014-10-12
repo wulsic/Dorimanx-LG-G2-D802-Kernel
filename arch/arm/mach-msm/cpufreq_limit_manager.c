@@ -44,11 +44,12 @@ int update_cpufreq_limit(unsigned int limit_type, bool limit_status)
 #ifdef CONFIG_SEC_DVFS
 	unsigned int min_freq = 0;
 	unsigned int max_freq = 0;
+	bool immediately_update = true;
 #else
-	unsigned int cpu;
 	unsigned int min_freq = MSM_CPUFREQ_NO_LIMIT;
 	unsigned int max_freq = MSM_CPUFREQ_NO_LIMIT;
 #endif
+	unsigned int cpu;
 
 	switch (limit_type) {
 	case 0:
@@ -91,15 +92,27 @@ int update_cpufreq_limit(unsigned int limit_type, bool limit_status)
 	}
 
 #ifdef CONFIG_SEC_DVFS
-	if (min_freq)
-		set_freq_limit(DVFS_APPS_MIN_ID, min_freq);
-	else
-		set_freq_limit(DVFS_APPS_MIN_ID, -1);
+	set_min_lock(min_freq);
+	set_max_lock(max_freq);
 
-	if (max_freq)
-		set_freq_limit(DVFS_APPS_MAX_ID, max_freq);
-	else
-		set_freq_limit(DVFS_APPS_MAX_ID, -1);
+	if (immediately_update) {
+		unsigned int cur = 0;
+
+		for_each_online_cpu(cpu) {
+			cur = cpufreq_quick_get(cpu);
+			if (cur) {
+				struct cpufreq_policy policy;
+				policy.cpu = cpu;
+
+				if (cur < min_freq)
+					cpufreq_driver_target(&policy,
+						min_freq, CPUFREQ_RELATION_H);
+				else if (cur > max_freq)
+					cpufreq_driver_target(&policy,
+						max_freq, CPUFREQ_RELATION_L);
+			}
+		}
+	}
 #else
 	for_each_possible_cpu(cpu) {
 		msm_cpufreq_set_freq_limits(cpu, min_freq, max_freq);
