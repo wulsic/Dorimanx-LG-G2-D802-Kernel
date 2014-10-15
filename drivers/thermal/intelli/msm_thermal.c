@@ -175,13 +175,17 @@ static struct notifier_block msm_thermal_cpufreq_notifier = {
 
 static int update_cpu_max_freq(int cpu, uint32_t max_freq)
 {
+	struct cpufreq_policy policy;
 	int ret = 0;
 
 	ret = msm_cpufreq_set_freq_limits(cpu, MSM_CPUFREQ_NO_LIMIT, max_freq);
 	if (ret)
 		return ret;
 
-	ret = cpufreq_update_policy(cpu);
+	/*ret = cpufreq_update_policy(cpu);*/
+	policy.cpu = cpu;
+	
+	cpufreq_driver_target(&policy, max_freq, CPUFREQ_RELATION_L);
 
 	return ret;
 }
