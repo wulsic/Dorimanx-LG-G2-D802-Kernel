@@ -91,14 +91,13 @@ static void do_input_boost(struct work_struct *work)
 		set_cpu_min_lock(i, input_boost_freq);
 
 		cur = cpufreq_quick_get(i);
-		if (cur) {
+		if (cur > 0 && cpu_online(i)) {
 			policy.cpu = i;
 
 			if (cur < input_boost_freq)
 					cpufreq_driver_target(&policy,
 						input_boost_freq, CPUFREQ_RELATION_L);
 		}
-
 	}
 
 	queue_delayed_work_on(0, touch_boost_wq,
