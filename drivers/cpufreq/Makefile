@@ -1,6 +1,9 @@
 # CPUfreq core
-#obj-$(CONFIG_CPU_FREQ)			+= cpufreq.o cpu-boost.o
+ifdef CONFIG_CPU_BOOST
+obj-$(CONFIG_CPU_FREQ)			+= cpufreq.o cpu-boost.o
+else
 obj-$(CONFIG_CPU_FREQ)			+= cpufreq.o
+endif
 # CPUfreq stats
 obj-$(CONFIG_CPU_FREQ_STAT)             += cpufreq_stats.o
 
