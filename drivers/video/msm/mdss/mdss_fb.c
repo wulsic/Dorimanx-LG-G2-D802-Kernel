@@ -948,6 +948,7 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
+	int ret;
 
 	mdss_fb_pan_idle(mfd);
 	if (mfd->op_enable == 0) {
@@ -958,6 +959,8 @@ static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 		return 0;
 	}
 
+	ret = mdss_fb_blank_sub(blank_mode, info, mfd->op_enable);
+
 #ifdef CONFIG_MACH_LGE
 	if (lge_get_boot_mode() == LGE_BOOT_MODE_CHARGER) {
 		/* HACK: preventing displaying garbage in off-mode charge */
@@ -967,7 +970,7 @@ static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 		}
 	}
 #endif
-	return mdss_fb_blank_sub(blank_mode, info, mfd->op_enable);
+	return ret;
 }
 
 /*
